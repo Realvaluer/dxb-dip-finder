@@ -14,6 +14,8 @@ export default function useFilters() {
     min_dip: searchParams.get('min_dip') || '0',
     max_price: searchParams.get('max_price') || '',
     min_sqft: searchParams.get('min_sqft') || '',
+    date_from: searchParams.get('date_from') || '',
+    date_to: searchParams.get('date_to') || '',
     communities: searchParams.getAll('community[]'),
     buildings: searchParams.getAll('property_name[]'),
   }), [searchParams]);
@@ -50,6 +52,7 @@ export default function useFilters() {
     if (parseFloat(filters.min_dip) > 0) count++;
     if (filters.max_price) count++;
     if (filters.min_sqft) count++;
+    if (filters.date_from || filters.date_to) count++;
     if (filters.communities.length) count++;
     if (filters.buildings.length) count++;
     return count;

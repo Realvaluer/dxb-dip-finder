@@ -25,8 +25,8 @@ function buildWhereClause(query) {
     params.search = `%${query.search}%`;
   }
   if (query.purpose) {
-    conditions.push(`l.purpose = @purpose`);
-    params.purpose = query.purpose;
+    conditions.push(`LOWER(l.purpose) = @purpose`);
+    params.purpose = query.purpose.toLowerCase();
   }
   if (query.type) {
     conditions.push(`l.type = @type`);
@@ -68,6 +68,26 @@ function buildWhereClause(query) {
     const placeholders = buildings.map((_, i) => `@bld${i}`);
     conditions.push(`l.property_name IN (${placeholders.join(',')})`);
     buildings.forEach((b, i) => { params[`bld${i}`] = b; });
+  }
+
+  // date range filter
+  if (query.date_from) {
+    conditions.push(`date(l.date_listed) >= @date_from`);
+    params.date_from = query.date_from;
+  }
+  if (query.date_to) {
+    conditions.push(`date(l.date_listed) <= @date_to`);
+    params.date_to = query.date_to;
+  }
+
+  // ids filter (for bookmarks)
+  if (query.ids) {
+    const idList = query.ids.split(',').map(Number).filter(n => !isNaN(n));
+    if (idList.length > 0) {
+      const placeholders = idList.map((_, i) => `@id${i}`);
+      conditions.push(`l.id IN (${placeholders.join(',')})`);
+      idList.forEach((id, i) => { params[`id${i}`] = id; });
+    }
   }
 
   // Always dedup on reference_no to match the web app count (80,979 vs 81,081)
@@ -189,8 +209,14 @@ app.get('/api/listings/:id', (req, res) => {
       ORDER BY edited_at DESC
     `).all({ id: row.id });
 
+    const prevUrl = db.prepare(`
+      SELECT new_value AS previous_url
+      FROM edits WHERE listing_id = @id AND field_name = 'url'
+      ORDER BY edited_at DESC LIMIT 1
+    `).get({ id: row.id });
+
     const { title, ...cleaned } = row;
-    res.json({ ...cleaned, price_history: history });
+    res.json({ ...cleaned, price_history: history, previous_url: prevUrl?.previous_url || null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch listing' });
@@ -282,6 +308,34 @@ app.get('/api/filter-options', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch filter options' });
+  }
+});
+
+// ── GET /api/search-suggestions ───────────────────────────────────────────────
+
+app.get('/api/search-suggestions', (req, res) => {
+  try {
+    const q = req.query.q;
+    if (!q || q.length < 2) return res.json({ communities: [], buildings: [] });
+
+    const communities = db.prepare(`
+      SELECT community AS label, COUNT(*) AS cnt
+      FROM listings
+      WHERE community LIKE @q AND community IS NOT NULL
+      GROUP BY community ORDER BY cnt DESC LIMIT 5
+    `).all({ q: `%${q}%` });
+
+    const buildings = db.prepare(`
+      SELECT property_name AS label, COUNT(*) AS cnt
+      FROM listings
+      WHERE property_name LIKE @q AND property_name IS NOT NULL
+      GROUP BY property_name ORDER BY cnt DESC LIMIT 5
+    `).all({ q: `%${q}%` });
+
+    res.json({ communities, buildings });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch suggestions' });
   }
 });
 

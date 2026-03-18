@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import useFilters from '../hooks/useFilters';
+import useBookmarks from '../hooks/useBookmarks';
 import { useFetch, useDebouncedFetch } from '../hooks/useApi';
 import TopBar from '../components/TopBar';
 import SearchBar from '../components/SearchBar';
@@ -10,9 +11,9 @@ import BottomNav from '../components/BottomNav';
 import { SkeletonCards } from '../components/Skeleton';
 
 const SORT_OPTIONS = [
+  { value: 'newest', label: '↓ Most recent' },
   { value: 'dip_pct', label: '↓ Biggest dip %' },
   { value: 'dip_aed', label: '↓ Biggest dip AED' },
-  { value: 'newest', label: '↓ Most recent' },
   { value: 'price_asc', label: '↑ Price low–high' },
   { value: 'price_desc', label: '↓ Price high–low' },
 ];
@@ -25,6 +26,7 @@ const PURPOSE_OPTIONS = [
 
 export default function Feed() {
   const { filters, setFilter, resetFilters, activeFilterCount, queryString } = useFilters();
+  const { toggle, isBookmarked } = useBookmarks();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const apiUrl = `/api/listings?${queryString}&limit=50`;
@@ -70,10 +72,28 @@ export default function Feed() {
     return () => window.removeEventListener('scroll', onScroll);
   }, [loadMore]);
 
+  // Date filter chip display
+  const hasDateFilter = filters.date_from || filters.date_to;
+
   return (
     <div className="min-h-screen bg-bg pb-20">
       <TopBar onFilterClick={() => setSheetOpen(true)} activeFilterCount={activeFilterCount} />
-      <SearchBar value={filters.search} onChange={v => setFilter('search', v)} />
+      <SearchBar
+        value={filters.search}
+        onChange={v => setFilter('search', v)}
+        onSelectCommunity={c => { setFilter('communities', [c]); setFilter('search', ''); }}
+        onSelectBuilding={b => { setFilter('buildings', [b]); setFilter('search', ''); }}
+      />
+
+      {/* Active date chip */}
+      {hasDateFilter && (
+        <div className="px-4 pb-1 flex items-center gap-2">
+          <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5">
+            {filters.date_from || '...'} – {filters.date_to || '...'}
+            <button onClick={() => { setFilter('date_from', ''); setFilter('date_to', ''); }} className="ml-0.5 font-bold">×</button>
+          </span>
+        </div>
+      )}
 
       <KPICards
         data={kpiData}
@@ -126,7 +146,9 @@ export default function Feed() {
         </div>
       ) : (
         <div className="px-4 flex flex-col gap-3">
-          {allListings.map(l => <ListingCard key={l.id} listing={l} />)}
+          {allListings.map(l => (
+            <ListingCard key={l.id} listing={l} bookmarked={isBookmarked(l.id)} onToggleBookmark={toggle} />
+          ))}
           {loadingMore && <SkeletonCards count={2} />}
           {!hasMore && allListings.length > 0 && (
             <div className="text-center text-xs text-muted py-4">End of results</div>

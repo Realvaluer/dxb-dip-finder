@@ -88,6 +88,8 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
         buildings: [...filters.buildings],
         type: filters.type,
         source: filters.source,
+        date_from: filters.date_from,
+        date_to: filters.date_to,
       });
     }
   }, [open]);
@@ -121,6 +123,35 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
         </div>
 
         <div className="overflow-y-auto flex-1 px-4 pb-4 space-y-5">
+          {/* Date listed */}
+          <div>
+            <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">Date listed</div>
+            <div className="flex gap-2 mb-2">
+              <div className="flex-1">
+                <label className="text-[10px] text-muted">From</label>
+                <input type="date" value={localFilters.date_from || ''}
+                  onChange={e => setLocal('date_from', e.target.value)}
+                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-white outline-none" />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] text-muted">To</label>
+                <input type="date" value={localFilters.date_to || ''}
+                  onChange={e => setLocal('date_to', e.target.value)}
+                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-white outline-none" />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: 'Today', fn: () => { const t = new Date().toISOString().slice(0,10); setLocal('date_from', t); setLocal('date_to', t); }},
+                { label: 'Last 7 days', fn: () => { const t = new Date(); const f = new Date(t - 7*86400000); setLocal('date_from', f.toISOString().slice(0,10)); setLocal('date_to', t.toISOString().slice(0,10)); }},
+                { label: 'Last 30 days', fn: () => { const t = new Date(); const f = new Date(t - 30*86400000); setLocal('date_from', f.toISOString().slice(0,10)); setLocal('date_to', t.toISOString().slice(0,10)); }},
+                { label: 'All time', fn: () => { setLocal('date_from', ''); setLocal('date_to', ''); }},
+              ].map(preset => (
+                <Pill key={preset.label} label={preset.label} selected={false} onClick={preset.fn} />
+              ))}
+            </div>
+          </div>
+
           {/* Sort */}
           <div>
             <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">Sort by</div>

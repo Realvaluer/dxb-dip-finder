@@ -53,7 +53,7 @@ export default function ListingDetail() {
         <div>
           <h1 className="text-xl font-bold">{l.property_name || l.community}</h1>
           <div className="text-sm text-muted mt-0.5">
-            {[l.community, l.type, l.purpose === 'sale' ? 'Sale' : 'Rent'].filter(Boolean).join(' · ')}
+            {[l.community, l.type, l.purpose?.toLowerCase() === 'sale' ? 'Sale' : 'Rent'].filter(Boolean).join(' · ')}
           </div>
           <div className="text-xs text-muted mt-1">Listed {formatDate(l.date_listed)}</div>
         </div>
@@ -117,6 +117,18 @@ export default function ListingDetail() {
                   <span>Prev: {formatPrice(l.previous_price)}</span>
                 </div>
               </div>
+
+              {/* Previous listing link */}
+              {l.previous_url && (
+                <a
+                  href={l.previous_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 flex items-center gap-2 text-accent text-xs hover:underline"
+                >
+                  → View previous listing on {l.source}
+                </a>
+              )}
             </div>
 
             <div className="border-t border-border" />
