@@ -81,8 +81,14 @@ export default function Feed() {
       <SearchBar
         value={filters.search}
         onChange={v => setFilter('search', v)}
-        onSelectCommunity={c => setFilters({ communities: [c], search: '' })}
-        onSelectBuilding={b => setFilters({ buildings: [b], search: '' })}
+        onSelectCommunity={c => {
+          const updated = filters.communities.includes(c) ? filters.communities : [...filters.communities, c];
+          setFilters({ communities: updated, search: '' });
+        }}
+        onSelectBuilding={b => {
+          const updated = filters.buildings.includes(b) ? filters.buildings : [...filters.buildings, b];
+          setFilters({ buildings: updated, search: '' });
+        }}
       />
 
       {/* Active date chip */}
@@ -163,6 +169,7 @@ export default function Feed() {
         onClose={() => setSheetOpen(false)}
         filters={filters}
         setFilter={setFilter}
+        setFilters={setFilters}
         resetFilters={resetFilters}
         resultCount={listingsData?.total}
         filterOptions={filterOptions}

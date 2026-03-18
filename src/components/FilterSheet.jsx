@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 function Pill({ label, selected, onClick }) {
   return (
@@ -13,20 +13,31 @@ function Pill({ label, selected, onClick }) {
   );
 }
 
-function MultiSelectSearch({ label, options, selected, onChange, placeholder }) {
+function SearchChipSelect({ label, placeholder, selected, onChange, fetchUrl }) {
   const [search, setSearch] = useState('');
-  const filtered = useMemo(() => {
-    if (!search) return options.slice(0, 100);
-    const q = search.toLowerCase();
-    return options.filter(o => o.toLowerCase().includes(q)).slice(0, 100);
-  }, [options, search]);
+  const [results, setResults] = useState([]);
+  const timerRef = useRef(null);
 
-  function toggle(val) {
-    if (selected.includes(val)) {
-      onChange(selected.filter(v => v !== val));
-    } else {
-      onChange([...selected, val]);
-    }
+  function handleSearch(v) {
+    setSearch(v);
+    clearTimeout(timerRef.current);
+    if (v.length < 2) { setResults([]); return; }
+    timerRef.current = setTimeout(() => {
+      fetch(`${fetchUrl}?q=${encodeURIComponent(v)}`)
+        .then(r => r.json())
+        .then(d => setResults(d))
+        .catch(() => {});
+    }, 200);
+  }
+
+  function add(val) {
+    if (!selected.includes(val)) onChange([...selected, val]);
+    setSearch('');
+    setResults([]);
+  }
+
+  function remove(val) {
+    onChange(selected.filter(v => v !== val));
   }
 
   return (
@@ -37,45 +48,40 @@ function MultiSelectSearch({ label, options, selected, onChange, placeholder }) 
           {selected.map(s => (
             <span key={s} className="bg-accent/20 text-accent text-[11px] px-2 py-1 rounded-full flex items-center gap-1">
               {s}
-              <button onClick={() => toggle(s)} className="ml-0.5">x</button>
+              <button onClick={() => remove(s)} className="ml-0.5 font-bold">x</button>
             </span>
           ))}
-          <button onClick={() => onChange([])} className="text-[11px] text-dip-red ml-1">Clear all</button>
+          <button onClick={() => onChange([])} className="text-[11px] text-dip-red ml-1">Clear</button>
         </div>
       )}
-      <input
-        type="text"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder={placeholder}
-        className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-white placeholder-muted outline-none focus:border-accent/50 mb-2"
-      />
-      <div className="max-h-40 overflow-y-auto space-y-0.5">
-        {filtered.map(opt => (
-          <button
-            key={opt}
-            onClick={() => toggle(opt)}
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded-lg hover:bg-card/50 min-h-[36px]"
-          >
-            <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-              selected.includes(opt) ? 'bg-accent border-accent' : 'border-border'
-            }`}>
-              {selected.includes(opt) && (
-                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </span>
-            <span className="text-white truncate">{opt}</span>
-          </button>
-        ))}
+      <div className="relative">
+        <input
+          type="text"
+          value={search}
+          onChange={e => handleSearch(e.target.value)}
+          placeholder={placeholder}
+          className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white placeholder-muted outline-none focus:border-accent/50"
+        />
+        {results.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1 bg-card border border-border rounded-lg shadow-lg z-50 max-h-40 overflow-y-auto">
+            {results.map(r => (
+              <button key={r.label} onClick={() => add(r.label)}
+                className="w-full text-left px-3 py-2 text-xs text-white hover:bg-accent/10 active:bg-accent/20 min-h-[36px] flex items-center justify-between">
+                <span className="truncate">{r.label}</span>
+                <span className="text-muted text-[10px] ml-2">{r.cnt}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-export default function FilterSheet({ open, onClose, filters, setFilter, resetFilters, resultCount, filterOptions }) {
+export default function FilterSheet({ open, onClose, filters, setFilter, setFilters, resetFilters, resultCount, filterOptions }) {
   const [localFilters, setLocalFilters] = useState({});
+  const sheetRef = useRef(null);
+  const dragRef = useRef({ startY: 0, currentY: 0, dragging: false });
 
   useEffect(() => {
     if (open) {
@@ -99,7 +105,12 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
   }
 
   function apply() {
-    Object.entries(localFilters).forEach(([k, v]) => setFilter(k, v));
+    // Use setFilters (batch) to avoid race condition
+    if (setFilters) {
+      setFilters(localFilters);
+    } else {
+      Object.entries(localFilters).forEach(([k, v]) => setFilter(k, v));
+    }
     onClose();
   }
 
@@ -107,6 +118,39 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
     resetFilters();
     onClose();
   }
+
+  // Swipe to close
+  const handleTouchStart = useCallback((e) => {
+    const el = sheetRef.current;
+    if (!el) return;
+    // Only allow swipe from the handle area (top 40px)
+    const rect = el.getBoundingClientRect();
+    const touchY = e.touches[0].clientY;
+    if (touchY - rect.top > 50) return;
+    dragRef.current = { startY: touchY, currentY: touchY, dragging: true };
+  }, []);
+
+  const handleTouchMove = useCallback((e) => {
+    if (!dragRef.current.dragging) return;
+    const touchY = e.touches[0].clientY;
+    dragRef.current.currentY = touchY;
+    const delta = touchY - dragRef.current.startY;
+    if (delta > 0 && sheetRef.current) {
+      sheetRef.current.style.transform = `translateY(${delta}px)`;
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!dragRef.current.dragging) return;
+    const delta = dragRef.current.currentY - dragRef.current.startY;
+    dragRef.current.dragging = false;
+    if (sheetRef.current) {
+      sheetRef.current.style.transform = '';
+    }
+    if (delta > 100) {
+      onClose();
+    }
+  }, [onClose]);
 
   if (!open) return null;
 
@@ -116,9 +160,15 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
   return (
     <>
       <div className="fixed inset-0 bg-black/60 z-40 sheet-overlay" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-50 bg-bg rounded-t-2xl max-h-[85vh] flex flex-col sheet-content">
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1">
+      <div
+        ref={sheetRef}
+        className="fixed inset-x-0 bottom-0 z-50 bg-bg rounded-t-2xl max-h-[85vh] flex flex-col sheet-content"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Handle — swipe target */}
+        <div className="flex justify-center pt-3 pb-1 cursor-grab">
           <div className="w-10 h-1 rounded-full bg-border" />
         </div>
 
@@ -131,13 +181,13 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
                 <label className="text-[10px] text-muted">From</label>
                 <input type="date" value={localFilters.date_from || ''}
                   onChange={e => setLocal('date_from', e.target.value)}
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-white outline-none" />
+                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white outline-none" />
               </div>
               <div className="flex-1">
                 <label className="text-[10px] text-muted">To</label>
                 <input type="date" value={localFilters.date_to || ''}
                   onChange={e => setLocal('date_to', e.target.value)}
-                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-xs text-white outline-none" />
+                  className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white outline-none" />
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -194,22 +244,22 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
             </div>
           </div>
 
-          {/* Community */}
-          <MultiSelectSearch
+          {/* Community — search + chips only */}
+          <SearchChipSelect
             label="Community"
-            options={opts.communities}
+            placeholder="Search community..."
             selected={localFilters.communities || []}
             onChange={v => setLocal('communities', v)}
-            placeholder="Search community..."
+            fetchUrl="/api/search-community"
           />
 
-          {/* Building */}
-          <MultiSelectSearch
+          {/* Building — search + chips only */}
+          <SearchChipSelect
             label="Building"
-            options={opts.property_names}
+            placeholder="Search building..."
             selected={localFilters.buildings || []}
             onChange={v => setLocal('buildings', v)}
-            placeholder="Search building..."
+            fetchUrl="/api/search-building"
           />
 
           {/* Property type */}
@@ -236,7 +286,7 @@ export default function FilterSheet({ open, onClose, filters, setFilter, resetFi
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border px-4 py-3 flex items-center justify-between">
+        <div className="border-t border-border px-4 py-3 flex items-center justify-between pb-[calc(12px+env(safe-area-inset-bottom))]">
           <button onClick={reset} className="text-sm text-muted min-h-[44px]">Reset all</button>
           <button onClick={apply} className="bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-semibold min-h-[44px]">
             Show {resultCount != null ? resultCount.toLocaleString() : '...'} results

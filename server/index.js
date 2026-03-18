@@ -331,6 +331,36 @@ app.get('/api/search-suggestions', (req, res) => {
   }
 });
 
+// ── GET /api/search-community ─────────────────────────────────────────────────
+
+app.get('/api/search-community', (req, res) => {
+  try {
+    const q = req.query.q;
+    if (!q || q.length < 2) return res.json([]);
+    const rows = db.prepare(`
+      SELECT community AS label, COUNT(*) AS cnt FROM listings
+      WHERE community LIKE @q AND community IS NOT NULL
+      GROUP BY community ORDER BY cnt DESC LIMIT 10
+    `).all({ q: `%${q}%` });
+    res.json(rows);
+  } catch (err) { res.status(500).json([]); }
+});
+
+// ── GET /api/search-building ─────────────────────────────────────────────────
+
+app.get('/api/search-building', (req, res) => {
+  try {
+    const q = req.query.q;
+    if (!q || q.length < 2) return res.json([]);
+    const rows = db.prepare(`
+      SELECT property_name AS label, COUNT(*) AS cnt FROM listings
+      WHERE property_name LIKE @q AND property_name IS NOT NULL AND property_name != ''
+      GROUP BY property_name ORDER BY cnt DESC LIMIT 10
+    `).all({ q: `%${q}%` });
+    res.json(rows);
+  } catch (err) { res.status(500).json([]); }
+});
+
 // ── static files (production) ────────────────────────────────────────────────
 
 const distPath = path.join(__dirname, '..', 'dist');
