@@ -25,7 +25,7 @@ const PURPOSE_OPTIONS = [
 ];
 
 export default function Feed() {
-  const { filters, setFilter, resetFilters, activeFilterCount, queryString } = useFilters();
+  const { filters, setFilter, setFilters, resetFilters, activeFilterCount, queryString } = useFilters();
   const { toggle, isBookmarked } = useBookmarks();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -81,8 +81,8 @@ export default function Feed() {
       <SearchBar
         value={filters.search}
         onChange={v => setFilter('search', v)}
-        onSelectCommunity={c => { setFilter('communities', [c]); setFilter('search', ''); }}
-        onSelectBuilding={b => { setFilter('buildings', [b]); setFilter('search', ''); }}
+        onSelectCommunity={c => setFilters({ communities: [c], search: '' })}
+        onSelectBuilding={b => setFilters({ buildings: [b], search: '' })}
       />
 
       {/* Active date chip */}

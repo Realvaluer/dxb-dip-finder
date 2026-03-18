@@ -20,24 +20,30 @@ export default function useFilters() {
     buildings: searchParams.getAll('property_name[]'),
   }), [searchParams]);
 
-  const setFilter = useCallback((key, value) => {
+  const applyFilterUpdates = useCallback((updates) => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
-      if (key === 'communities') {
-        next.delete('community[]');
-        (value || []).forEach(v => next.append('community[]', v));
-      } else if (key === 'buildings') {
-        next.delete('property_name[]');
-        (value || []).forEach(v => next.append('property_name[]', v));
-      } else if (!value && value !== 0) {
-        next.delete(key);
-      } else {
-        next.set(key, value);
+      for (const [key, value] of Object.entries(updates)) {
+        if (key === 'communities') {
+          next.delete('community[]');
+          (value || []).forEach(v => next.append('community[]', v));
+        } else if (key === 'buildings') {
+          next.delete('property_name[]');
+          (value || []).forEach(v => next.append('property_name[]', v));
+        } else if (!value && value !== 0) {
+          next.delete(key);
+        } else {
+          next.set(key, value);
+        }
       }
       next.delete('offset');
       return next;
     });
   }, [setSearchParams]);
+
+  const setFilter = useCallback((key, value) => {
+    applyFilterUpdates({ [key]: value });
+  }, [applyFilterUpdates]);
 
   const resetFilters = useCallback(() => {
     setSearchParams({});
@@ -62,5 +68,5 @@ export default function useFilters() {
     return searchParams.toString();
   }, [searchParams]);
 
-  return { filters, setFilter, resetFilters, activeFilterCount, queryString };
+  return { filters, setFilter, setFilters: applyFilterUpdates, resetFilters, activeFilterCount, queryString };
 }

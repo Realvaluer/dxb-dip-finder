@@ -54,16 +54,16 @@ function buildWhereClause(query) {
     params.min_sqft = parseInt(query.min_sqft, 10);
   }
 
-  // community[] multi-value
-  const communities = toArray(query['community[]'] || query.community_arr);
+  // community[] multi-value — Express parses ?community[]=X into query.community (array)
+  const communities = toArray(query['community[]'] || query.community || query.community_arr);
   if (communities.length) {
     const placeholders = communities.map((_, i) => `@comm${i}`);
     conditions.push(`l.community IN (${placeholders.join(',')})`);
     communities.forEach((c, i) => { params[`comm${i}`] = c; });
   }
 
-  // property_name[] multi-value
-  const buildings = toArray(query['property_name[]'] || query.property_name_arr);
+  // property_name[] multi-value — Express parses ?property_name[]=X into query.property_name (array)
+  const buildings = toArray(query['property_name[]'] || query.property_name || query.property_name_arr);
   if (buildings.length) {
     const placeholders = buildings.map((_, i) => `@bld${i}`);
     conditions.push(`l.property_name IN (${placeholders.join(',')})`);
@@ -103,34 +103,25 @@ function toArray(val) {
 // Dedup: the web app deduplicates by reference_no; 102 duplicate rows exist in the DB
 const DEDUP_CONDITION = `l.id IN (SELECT MIN(id) FROM listings GROUP BY reference_no)`;
 
-const DIP_JOIN = `
-LEFT JOIN (
-  SELECT listing_id, old_value, edited_at
-  FROM edits
-  WHERE field_name = 'price_aed'
-    AND old_value IS NOT NULL
-  GROUP BY listing_id
-  HAVING edited_at = MAX(edited_at)
-) e ON e.listing_id = l.id
-`;
+// Dip data is pre-computed by the scraper and stored in the dip_data table
+const DIP_JOIN = `LEFT JOIN dip_data d ON d.listing_id = l.id`;
 
 function dipSelectFields() {
   return `
     l.*,
-    CAST(e.old_value AS INTEGER) AS previous_price,
-    e.edited_at AS price_changed_at,
-    CASE WHEN e.old_value IS NOT NULL AND CAST(e.old_value AS INTEGER) > l.price_aed
-      THEN CAST(e.old_value AS INTEGER) - l.price_aed ELSE NULL END AS dip_amount,
-    CASE WHEN e.old_value IS NOT NULL AND CAST(e.old_value AS INTEGER) > l.price_aed
-      THEN ROUND((CAST(e.old_value AS INTEGER) - l.price_aed) * 100.0 / CAST(e.old_value AS INTEGER), 1)
-      ELSE NULL END AS dip_percent
+    d.prev_price AS previous_price,
+    d.prev_date AS price_changed_at,
+    d.prev_url AS previous_url_from_dip,
+    d.prev_source AS prev_source,
+    CASE WHEN d.dip_pct < 0 THEN ABS(d.dip_amount) ELSE NULL END AS dip_amount,
+    CASE WHEN d.dip_pct < 0 THEN ABS(d.dip_pct) ELSE NULL END AS dip_percent
   `;
 }
 
 function sortClause(sort) {
   switch (sort) {
-    case 'dip_aed': return 'ORDER BY (CASE WHEN dip_amount IS NULL THEN 1 ELSE 0 END), dip_amount DESC, date(date_listed) DESC';
-    case 'dip_pct': return 'ORDER BY (CASE WHEN dip_percent IS NULL THEN 1 ELSE 0 END), dip_percent DESC, date(date_listed) DESC';
+    case 'dip_aed': return 'ORDER BY dip_amount IS NULL, dip_amount DESC, date(date_listed) DESC';
+    case 'dip_pct': return 'ORDER BY dip_percent IS NULL, dip_percent DESC, date(date_listed) DESC';
     case 'price_asc': return 'ORDER BY price_aed ASC';
     case 'price_desc': return 'ORDER BY price_aed DESC';
     case 'newest':
@@ -209,14 +200,15 @@ app.get('/api/listings/:id', (req, res) => {
       ORDER BY edited_at DESC
     `).all({ id: row.id });
 
-    const prevUrl = db.prepare(`
-      SELECT new_value AS previous_url
-      FROM edits WHERE listing_id = @id AND field_name = 'url'
-      ORDER BY edited_at DESC LIMIT 1
-    `).get({ id: row.id });
+    // Get previous URL from dip_data table
+    const dipRow = db.prepare(`SELECT prev_url, prev_source FROM dip_data WHERE listing_id = @id`).get({ id: row.id });
 
-    const { title, ...cleaned } = row;
-    res.json({ ...cleaned, price_history: history, previous_url: prevUrl?.previous_url || null });
+    const { title, previous_url_from_dip, ...cleaned } = row;
+    res.json({
+      ...cleaned,
+      price_history: history,
+      previous_url: previous_url_from_dip || dipRow?.prev_url || null,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch listing' });
