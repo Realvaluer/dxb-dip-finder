@@ -15,8 +15,22 @@ export async function ensureDatabase() {
   if (!dbPath) return; // local dev, skip
 
   if (fs.existsSync(dbPath)) {
-    console.log(`Database exists at ${dbPath}`);
-    return;
+    // Check if the DB has the dip_data table (v2 schema)
+    try {
+      const Database = (await import('better-sqlite3')).default;
+      const db = new Database(dbPath, { readonly: true });
+      const hasDipData = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='dip_data'").get();
+      db.close();
+      if (hasDipData) {
+        console.log(`Database exists at ${dbPath} with dip_data table`);
+        return;
+      }
+      console.log(`Database exists but missing dip_data table, re-downloading...`);
+      fs.unlinkSync(dbPath);
+    } catch (e) {
+      console.log(`Database exists but schema check failed: ${e.message}, re-downloading...`);
+      fs.unlinkSync(dbPath);
+    }
   }
 
   if (!seedUrl) {
