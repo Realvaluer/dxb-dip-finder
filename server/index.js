@@ -5,7 +5,8 @@ import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import db from './db.js';
+import db, { usersDb } from './db.js';
+import { registerAuthRoutes, requireAuth } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,6 +14,7 @@ const PORT = process.env.PORT || 3001;
 
 app.use(helmet());
 app.use(compression());
+app.use(express.json());
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -442,6 +444,52 @@ try {
 } catch (e) {
   // File watching is optional — ignore errors
 }
+
+// ── Auth routes ──────────────────────────────────────────────────────────────
+
+registerAuthRoutes(app);
+
+// ── Saved listings routes ────────────────────────────────────────────────────
+
+app.get('/api/saved/ids', requireAuth, (req, res) => {
+  const rows = usersDb.prepare(`SELECT listing_id FROM saved_listings WHERE user_id = ?`).all(req.user.user_id);
+  res.json(rows.map(r => r.listing_id));
+});
+
+app.get('/api/saved', requireAuth, (req, res) => {
+  try {
+    const savedIds = usersDb.prepare(`SELECT listing_id FROM saved_listings WHERE user_id = ? ORDER BY saved_at DESC`).all(req.user.user_id);
+    if (savedIds.length === 0) return res.json({ listings: [], total: 0 });
+
+    const ids = savedIds.map(r => r.listing_id);
+    const placeholders = ids.map((_, i) => `@id${i}`);
+    const params = {};
+    ids.forEach((id, i) => { params[`id${i}`] = id; });
+
+    const sql = `
+      SELECT ${dipSelectFields()}
+      FROM listings l
+      ${DIP_JOIN}
+      WHERE l.id IN (${placeholders.join(',')})
+    `;
+    const rows = db.prepare(sql).all(params);
+    const cleaned = rows.map(({ title, ...rest }) => rest);
+    res.json({ listings: cleaned, total: cleaned.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch saved listings' });
+  }
+});
+
+app.post('/api/saved/:listing_id', requireAuth, (req, res) => {
+  usersDb.prepare(`INSERT OR IGNORE INTO saved_listings (user_id, listing_id) VALUES (?, ?)`).run(req.user.user_id, parseInt(req.params.listing_id));
+  res.json({ saved: true });
+});
+
+app.delete('/api/saved/:listing_id', requireAuth, (req, res) => {
+  usersDb.prepare(`DELETE FROM saved_listings WHERE user_id = ? AND listing_id = ?`).run(req.user.user_id, parseInt(req.params.listing_id));
+  res.json({ saved: false });
+});
 
 // ── static files (production) ────────────────────────────────────────────────
 

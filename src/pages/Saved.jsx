@@ -1,14 +1,24 @@
-import { useFetch } from '../hooks/useApi';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
 import useBookmarks from '../hooks/useBookmarks';
 import ListingCard from '../components/ListingCard';
 import BottomNav from '../components/BottomNav';
 import { SkeletonCards } from '../components/Skeleton';
 
 export default function Saved() {
-  const { bookmarks, toggle, isBookmarked } = useBookmarks();
+  const { user, isAuthenticated, openAuth } = useAuth();
+  const { toggle, isBookmarked } = useBookmarks();
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const apiUrl = bookmarks.length > 0 ? `/api/listings?ids=${bookmarks.join(',')}&limit=200` : null;
-  const { data, loading } = useFetch(apiUrl || '/api/listings?ids=-1&limit=0', [bookmarks.join(',')]);
+  useEffect(() => {
+    if (!isAuthenticated || !user?.token) { setLoading(false); return; }
+    setLoading(true);
+    fetch('/api/saved', { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => r.ok ? r.json() : { listings: [] })
+      .then(d => { setListings(d.listings || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [isAuthenticated, user?.token]);
 
   return (
     <div className="min-h-screen bg-bg pb-20">
@@ -16,16 +26,24 @@ export default function Saved() {
         <h1 className="text-lg font-bold">Saved Listings</h1>
       </div>
 
-      {bookmarks.length === 0 ? (
+      {!isAuthenticated ? (
+        <div className="px-4 py-16 text-center">
+          <div className="text-white font-medium mb-2">Sign in to save listings</div>
+          <div className="text-muted text-sm mb-4">Save properties and get alerts when similar ones appear</div>
+          <button onClick={() => openAuth()} className="bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-semibold min-h-[44px]">
+            Sign in
+          </button>
+        </div>
+      ) : loading ? (
+        <div className="px-4 pt-4"><SkeletonCards count={3} /></div>
+      ) : listings.length === 0 ? (
         <div className="px-4 py-16 text-center">
           <div className="text-white font-medium mb-1">No saved listings yet</div>
           <div className="text-muted text-sm">Tap the bookmark icon on any listing to save it here</div>
         </div>
-      ) : loading ? (
-        <div className="px-4 pt-4"><SkeletonCards count={3} /></div>
       ) : (
         <div className="px-4 pt-4 flex flex-col gap-3">
-          {(data?.listings || []).map(l => (
+          {listings.map(l => (
             <ListingCard key={l.id} listing={l} bookmarked={isBookmarked(l.id)} onToggleBookmark={toggle} />
           ))}
         </div>
