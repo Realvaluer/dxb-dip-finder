@@ -105,18 +105,26 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
   }
 
   function apply() {
-    // Use setFilters (batch) to avoid race condition
-    if (setFilters) {
-      setFilters(localFilters);
-    } else {
-      Object.entries(localFilters).forEach(([k, v]) => setFilter(k, v));
+    // Build URL params directly — bypasses React state batching issues
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(localFilters)) {
+      if (key === 'communities') {
+        (value || []).forEach(v => params.append('community[]', v));
+      } else if (key === 'buildings') {
+        (value || []).forEach(v => params.append('property_name[]', v));
+      } else if (key === 'sort' && value !== 'newest') {
+        params.set(key, value);
+      } else if (key === 'min_dip' && parseFloat(value) > 0) {
+        params.set(key, value);
+      } else if (key !== 'sort' && key !== 'min_dip' && value) {
+        params.set(key, value);
+      }
     }
-    onClose();
+    window.location.href = '/?' + params.toString();
   }
 
   function reset() {
-    resetFilters();
-    onClose();
+    window.location.href = '/';
   }
 
   // Swipe to close
