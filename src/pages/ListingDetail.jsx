@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useFetch } from '../hooks/useApi';
-import { formatPrice, formatDate, dipColor, dipTextColor, sourceTag } from '../utils';
+import { formatPrice, formatDate, sourceTag } from '../utils';
 
 export default function ListingDetail() {
   const { id } = useParams();
@@ -31,9 +31,13 @@ export default function ListingDetail() {
   }
 
   const l = listing;
-  const hasDip = l.dip_percent > 0;
+  const isDecrease = l.change_pct != null && l.change_pct < 0;
+  const isIncrease = l.change_pct != null && l.change_pct > 0;
+  const hasChange = isDecrease || isIncrease;
+  const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
+  const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
   const aedPerSqft = l.size_sqft ? Math.round(l.price_aed / l.size_sqft) : null;
-  const barWidth = hasDip ? Math.round((l.price_aed / l.previous_price) * 100) : 0;
+  const barWidth = hasChange && l.previous_price ? Math.min(Math.round((l.price_aed / l.previous_price) * 100), 100) : 0;
 
   return (
     <div className="min-h-screen bg-bg pb-8">
@@ -58,12 +62,17 @@ export default function ListingDetail() {
           <div className="text-xs text-muted mt-1">Listed {formatDate(l.date_listed)}</div>
         </div>
 
-        {/* Price + dip */}
+        {/* Price + change badge */}
         <div className="flex items-center gap-3">
           <span className="text-2xl font-bold">{formatPrice(l.price_aed)}</span>
-          {hasDip && (
-            <span className={`text-sm font-bold px-2.5 py-1 rounded-full text-white ${dipColor(l.dip_percent)}`}>
-              -{l.dip_percent}%
+          {isDecrease && (
+            <span className="text-sm font-bold px-2.5 py-1 rounded-full bg-[rgba(226,75,74,0.15)] border border-[rgba(226,75,74,0.4)] text-dip-red">
+              −{absChangePct}%
+            </span>
+          )}
+          {isIncrease && (
+            <span className="text-sm font-bold px-2.5 py-1 rounded-full bg-[rgba(29,158,117,0.15)] border border-[rgba(29,158,117,0.4)] text-accent">
+              +{absChangePct}%
             </span>
           )}
         </div>
@@ -82,11 +91,11 @@ export default function ListingDetail() {
 
         <div className="border-t border-border" />
 
-        {/* Price comparison panel */}
-        {hasDip && (
+        {/* Price change panel */}
+        {hasChange && (
           <>
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Price drop</div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Price change</div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-card rounded-xl p-3">
                   <div className="text-[10px] text-muted">Current price</div>
@@ -97,11 +106,13 @@ export default function ListingDetail() {
                   <div className="text-sm font-bold mt-0.5">{formatPrice(l.previous_price)}</div>
                 </div>
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Drop amount</div>
-                  <div className="text-sm font-bold mt-0.5 text-dip-red">-{formatPrice(l.dip_amount)}</div>
+                  <div className="text-[10px] text-muted">{isDecrease ? 'Decreased by' : 'Increased by'}</div>
+                  <div className={`text-sm font-bold mt-0.5 ${isDecrease ? 'text-dip-red' : 'text-accent'}`}>
+                    {isDecrease ? '−' : '+'}{formatPrice(absChangeAed)}
+                  </div>
                 </div>
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Drop date</div>
+                  <div className="text-[10px] text-muted">Change date</div>
                   <div className="text-sm font-bold mt-0.5">{formatDate(l.price_changed_at)}</div>
                 </div>
               </div>
@@ -109,7 +120,10 @@ export default function ListingDetail() {
               {/* Visual bar */}
               <div className="mt-3 space-y-1">
                 <div className="h-6 rounded-lg bg-blue-900/30 relative overflow-hidden">
-                  <div className="h-full rounded-lg bg-dip-red/40" style={{ width: `${barWidth}%` }} />
+                  <div className={`h-full rounded-lg ${isDecrease ? 'bg-dip-red/40' : 'bg-accent/40'}`} style={{ width: `${barWidth}%` }} />
+                  {isIncrease && (
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-accent font-bold">+</span>
+                  )}
                 </div>
                 <div className="flex justify-between text-[10px] text-muted">
                   <span>AED 0</span>
@@ -151,17 +165,19 @@ export default function ListingDetail() {
                 {l.price_history.map((h, i) => {
                   const oldVal = parseInt(h.old_value, 10);
                   const newVal = parseInt(h.new_value, 10);
-                  const change = oldVal - newVal;
+                  const change = newVal - oldVal;
                   const changePct = oldVal ? ((change / oldVal) * 100).toFixed(1) : 0;
-                  const isDown = change > 0;
+                  const isDown = change < 0;
                   return (
                     <div key={i} className="bg-card rounded-xl p-3">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-muted">{formatDate(h.edited_at)}</span>
                         <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          isDown ? 'bg-dip-red/20 text-dip-red' : 'bg-green-900/30 text-green-400'
+                          isDown
+                            ? 'bg-[rgba(226,75,74,0.15)] border border-[rgba(226,75,74,0.4)] text-dip-red'
+                            : 'bg-[rgba(29,158,117,0.15)] border border-[rgba(29,158,117,0.4)] text-accent'
                         }`}>
-                          {isDown ? '↓' : '↑'} {Math.abs(changePct)}%
+                          {isDown ? '↓' : '↑'} {isDown ? '−' : '+'}{Math.abs(changePct)}%
                         </span>
                       </div>
                       <div className="text-sm font-bold mt-1">AED {newVal?.toLocaleString()}</div>

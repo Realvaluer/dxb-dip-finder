@@ -116,15 +116,17 @@ function dipSelectFields() {
     d.prev_date AS price_changed_at,
     d.prev_url AS previous_url_from_dip,
     d.prev_source AS prev_source,
-    CASE WHEN d.dip_pct < 0 THEN ABS(d.dip_amount) ELSE NULL END AS dip_amount,
-    CASE WHEN d.dip_pct < 0 THEN ABS(d.dip_pct) ELSE NULL END AS dip_percent
+    CASE WHEN d.dip_pct IS NOT NULL AND d.dip_pct != 0
+      THEN ROUND(d.dip_pct, 1) ELSE NULL END AS change_pct,
+    CASE WHEN d.dip_amount IS NOT NULL AND d.dip_amount != 0
+      THEN d.dip_amount ELSE NULL END AS change_aed
   `;
 }
 
 function sortClause(sort) {
   switch (sort) {
-    case 'dip_aed': return 'ORDER BY dip_amount IS NULL, dip_amount DESC, date(date_listed) DESC';
-    case 'dip_pct': return 'ORDER BY dip_percent IS NULL, dip_percent DESC, date(date_listed) DESC';
+    case 'dip_aed': return 'ORDER BY change_aed IS NULL, change_aed ASC, date(date_listed) DESC';
+    case 'dip_pct': return 'ORDER BY change_pct IS NULL, change_pct ASC, date(date_listed) DESC';
     case 'price_asc': return 'ORDER BY price_aed ASC';
     case 'price_desc': return 'ORDER BY price_aed DESC';
     case 'newest':
@@ -134,7 +136,8 @@ function sortClause(sort) {
 
 function dipFilter(minDip) {
   if (!minDip || parseFloat(minDip) <= 0) return '';
-  return `AND (dip_percent IS NOT NULL AND dip_percent >= ${parseFloat(minDip)})`;
+  // min_dip filters for price drops only (change_pct is negative for drops)
+  return `AND (change_pct IS NOT NULL AND change_pct <= -${parseFloat(minDip)})`;
 }
 
 // Shared count query used by /api/listings and /api/listings/count
@@ -266,24 +269,27 @@ app.get('/api/kpis', (req, res) => {
       WHERE 1=1 ${dipFilter(minDip)}
     `;
 
+    // Biggest price drop = most negative change_pct
     const highestPct = db.prepare(`
-      SELECT id AS listing_id, dip_percent, property_name, community
+      SELECT id AS listing_id, change_pct, property_name, community
       FROM (${baseSql})
-      WHERE dip_percent IS NOT NULL
-      ORDER BY dip_percent DESC LIMIT 1
+      WHERE change_pct IS NOT NULL AND change_pct < 0
+      ORDER BY change_pct ASC LIMIT 1
     `).get(params);
 
+    // Biggest AED drop = most negative change_aed
     const highestAed = db.prepare(`
-      SELECT id AS listing_id, dip_amount, property_name, community
+      SELECT id AS listing_id, change_aed, property_name, community
       FROM (${baseSql})
-      WHERE dip_amount IS NOT NULL
-      ORDER BY dip_amount DESC LIMIT 1
+      WHERE change_aed IS NOT NULL AND change_aed < 0
+      ORDER BY change_aed ASC LIMIT 1
     `).get(params);
 
+    // Most active = community with most price changes (any direction)
     const mostActive = db.prepare(`
       SELECT community, COUNT(*) as count
       FROM (${baseSql})
-      WHERE dip_percent IS NOT NULL AND dip_percent > 0
+      WHERE change_pct IS NOT NULL
       GROUP BY community
       ORDER BY count DESC LIMIT 1
     `).get(params);

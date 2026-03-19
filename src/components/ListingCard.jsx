@@ -1,9 +1,15 @@
 import { useNavigate } from 'react-router-dom';
-import { formatDate, formatMonthYear, formatPrice, dipColor, sourceTag } from '../utils';
+import { formatDate, formatMonthYear, formatPrice, sourceTag } from '../utils';
 
 export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const navigate = useNavigate();
   const l = listing;
+
+  const isDecrease = l.change_pct != null && l.change_pct < 0;
+  const isIncrease = l.change_pct != null && l.change_pct > 0;
+  const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
+  const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
+  const hasChange = isDecrease || isIncrease;
 
   function handleBookmark(e) {
     e.stopPropagation();
@@ -19,13 +25,18 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
       onClick={() => navigate(`/listing/${l.id}`)}
       className="w-full bg-card rounded-xl p-4 text-left active:opacity-80 transition-opacity"
     >
-      {/* Row 1: date + bookmark + dip pill */}
+      {/* Row 1: date + bookmark + change pill */}
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-[11px] font-mono text-muted">{formatDate(l.date_listed)}</span>
         <div className="flex items-center gap-2">
-          {l.dip_percent > 0 && (
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-white ${dipColor(l.dip_percent)}`}>
-              -{l.dip_percent}%
+          {isDecrease && (
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[rgba(226,75,74,0.15)] border border-[rgba(226,75,74,0.4)] text-dip-red">
+              −{absChangePct}%
+            </span>
+          )}
+          {isIncrease && (
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[rgba(29,158,117,0.15)] border border-[rgba(29,158,117,0.4)] text-accent">
+              +{absChangePct}%
             </span>
           )}
           <span onClick={handleBookmark} className="min-w-[28px] min-h-[28px] flex items-center justify-center">
@@ -60,10 +71,16 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
         <span className="ml-auto text-[10px] font-mono text-muted">{sourceTag(l.source)}</span>
       </div>
 
-      {/* Row 5: dip footer */}
-      {l.dip_percent > 0 && (
+      {/* Row 5: price change footer */}
+      {isDecrease && (
         <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
-          <span className="text-dip-red font-medium">-{formatPrice(l.dip_amount)}</span>
+          <span className="text-dip-red font-medium">−{formatPrice(absChangeAed)}</span>
+          {' '}vs prev. {formatPrice(l.previous_price)} · {formatMonthYear(l.price_changed_at)}
+        </div>
+      )}
+      {isIncrease && (
+        <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
+          <span className="text-accent font-medium">+{formatPrice(absChangeAed)}</span>
           {' '}vs prev. {formatPrice(l.previous_price)} · {formatMonthYear(l.price_changed_at)}
         </div>
       )}
@@ -75,7 +92,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleViewLink}
-          className="mt-2 pt-2 border-t border-border text-[11px] text-accent flex items-center gap-1 hover:underline"
+          className={`${hasChange ? '' : 'mt-2 pt-2 border-t border-border '}text-[11px] text-accent flex items-center gap-1 hover:underline ${hasChange ? 'mt-1' : ''}`}
         >
           → View on {l.source}
         </a>
