@@ -1,7 +1,6 @@
 /**
- * Startup script: if DB_PATH doesn't exist, download database from DB_SEED_URL.
- * Used on Railway to populate the volume on first deploy.
- * Set DB_SEED_URL env var to a direct download URL for database.db
+ * Startup script: ensures DB exists and is up-to-date on Railway.
+ * Downloads from DB_SEED_URL if DB is missing or a FORCE_DB_UPDATE env var is set.
  */
 import fs from 'fs';
 import path from 'path';
@@ -14,8 +13,10 @@ const seedUrl = process.env.DB_SEED_URL;
 export async function ensureDatabase() {
   if (!dbPath) return; // local dev, skip
 
-  if (fs.existsSync(dbPath)) {
-    // Check if the DB has the dip_data table (v2 schema)
+  const forceUpdate = process.env.FORCE_DB_UPDATE === 'true';
+
+  if (fs.existsSync(dbPath) && !forceUpdate) {
+    // Check if the DB has the dip_data table (current schema)
     try {
       const Database = (await import('better-sqlite3')).default;
       const db = new Database(dbPath, { readonly: true });
@@ -28,10 +29,15 @@ export async function ensureDatabase() {
       console.log(`Database exists but missing dip_data table, re-downloading...`);
       fs.unlinkSync(dbPath);
     } catch (e) {
-      console.log(`Database exists but schema check failed: ${e.message}, re-downloading...`);
-      fs.unlinkSync(dbPath);
+      console.log(`Database check failed: ${e.message}, re-downloading...`);
+      try { fs.unlinkSync(dbPath); } catch {}
     }
+  } else if (forceUpdate && fs.existsSync(dbPath)) {
+    console.log('FORCE_DB_UPDATE is set, re-downloading database...');
+    fs.unlinkSync(dbPath);
   }
+
+  if (fs.existsSync(dbPath)) return;
 
   if (!seedUrl) {
     console.error('DB_PATH set but database missing and no DB_SEED_URL configured');
@@ -40,7 +46,6 @@ export async function ensureDatabase() {
 
   console.log(`Database not found at ${dbPath}, downloading from seed URL...`);
 
-  // Ensure directory exists
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -50,7 +55,6 @@ export async function ensureDatabase() {
     const download = (url) => {
       const client = url.startsWith('https') ? https : http;
       client.get(url, (res) => {
-        // Follow redirects
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           console.log(`Redirecting to ${res.headers.location}`);
           download(res.headers.location);
@@ -81,4 +85,7 @@ export async function ensureDatabase() {
     };
     download(seedUrl);
   });
+
+  // After download, unset FORCE_DB_UPDATE for next restart
+  delete process.env.FORCE_DB_UPDATE;
 }
