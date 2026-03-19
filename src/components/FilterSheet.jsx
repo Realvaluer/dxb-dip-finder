@@ -4,7 +4,7 @@ function Pill({ label, selected, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-medium transition min-h-[36px] ${
+      className={`px-3 py-1.5 rounded-full text-xs font-medium transition min-h-[36px] whitespace-nowrap ${
         selected ? 'bg-accent text-white' : 'bg-card text-muted border border-border'
       }`}
     >
@@ -41,14 +41,14 @@ function SearchChipSelect({ label, placeholder, selected, onChange, fetchUrl }) 
   }
 
   return (
-    <div>
+    <div className="overflow-hidden">
       <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">{label}</div>
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {selected.map(s => (
-            <span key={s} className="bg-accent/20 text-accent text-[11px] px-2 py-1 rounded-full flex items-center gap-1">
-              {s}
-              <button onClick={() => remove(s)} className="ml-0.5 font-bold">x</button>
+            <span key={s} className="bg-accent/20 text-accent text-[11px] px-2 py-1 rounded-full flex items-center gap-1 max-w-full">
+              <span className="truncate">{s}</span>
+              <button onClick={() => remove(s)} className="ml-0.5 font-bold flex-shrink-0">x</button>
             </span>
           ))}
           <button onClick={() => onChange([])} className="text-[11px] text-dip-red ml-1">Clear</button>
@@ -68,7 +68,7 @@ function SearchChipSelect({ label, placeholder, selected, onChange, fetchUrl }) 
               <button key={r.label} onClick={() => add(r.label)}
                 className="w-full text-left px-3 py-2 text-xs text-white hover:bg-accent/10 active:bg-accent/20 min-h-[36px] flex items-center justify-between">
                 <span className="truncate">{r.label}</span>
-                <span className="text-muted text-[10px] ml-2">{r.cnt}</span>
+                <span className="text-muted text-[10px] ml-2 flex-shrink-0">{r.cnt}</span>
               </button>
             ))}
           </div>
@@ -78,10 +78,32 @@ function SearchChipSelect({ label, placeholder, selected, onChange, fetchUrl }) 
   );
 }
 
-export default function FilterSheet({ open, onClose, filters, setFilter, setFilters, resetFilters, resultCount, filterOptions }) {
+// Build URL params from local filter state
+function buildFilterParams(localFilters) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(localFilters)) {
+    if (key === 'communities') {
+      (value || []).forEach(v => params.append('community[]', v));
+    } else if (key === 'buildings') {
+      (value || []).forEach(v => params.append('property_name[]', v));
+    } else if (key === 'sort' && value && value !== 'newest') {
+      params.set(key, value);
+    } else if (key === 'min_dip' && parseFloat(value) > 0) {
+      params.set(key, value);
+    } else if (key !== 'sort' && key !== 'min_dip' && value) {
+      params.set(key, value);
+    }
+  }
+  return params;
+}
+
+export default function FilterSheet({ open, onClose, filters, filterOptions }) {
   const [localFilters, setLocalFilters] = useState({});
+  const [liveCount, setLiveCount] = useState(null);
+  const [countLoading, setCountLoading] = useState(false);
   const sheetRef = useRef(null);
   const dragRef = useRef({ startY: 0, currentY: 0, dragging: false });
+  const countTimerRef = useRef(null);
 
   useEffect(() => {
     if (open) {
@@ -97,29 +119,31 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
         date_from: filters.date_from,
         date_to: filters.date_to,
       });
+      setLiveCount(null);
     }
   }, [open]);
+
+  // Fetch live count whenever local filters change
+  useEffect(() => {
+    if (!open) return;
+    clearTimeout(countTimerRef.current);
+    setCountLoading(true);
+    countTimerRef.current = setTimeout(() => {
+      const params = buildFilterParams(localFilters);
+      fetch(`/api/listings/count?${params.toString()}`)
+        .then(r => r.json())
+        .then(d => { setLiveCount(d.total); setCountLoading(false); })
+        .catch(() => setCountLoading(false));
+    }, 300);
+    return () => clearTimeout(countTimerRef.current);
+  }, [localFilters, open]);
 
   function setLocal(key, val) {
     setLocalFilters(prev => ({ ...prev, [key]: val }));
   }
 
   function apply() {
-    // Build URL params directly — bypasses React state batching issues
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(localFilters)) {
-      if (key === 'communities') {
-        (value || []).forEach(v => params.append('community[]', v));
-      } else if (key === 'buildings') {
-        (value || []).forEach(v => params.append('property_name[]', v));
-      } else if (key === 'sort' && value !== 'newest') {
-        params.set(key, value);
-      } else if (key === 'min_dip' && parseFloat(value) > 0) {
-        params.set(key, value);
-      } else if (key !== 'sort' && key !== 'min_dip' && value) {
-        params.set(key, value);
-      }
-    }
+    const params = buildFilterParams(localFilters);
     window.location.href = '/?' + params.toString();
   }
 
@@ -127,15 +151,9 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
     window.location.href = '/';
   }
 
-  // Swipe to close
+  // Swipe to close — works from anywhere on the sheet
   const handleTouchStart = useCallback((e) => {
-    const el = sheetRef.current;
-    if (!el) return;
-    // Only allow swipe from the handle area (top 40px)
-    const rect = el.getBoundingClientRect();
-    const touchY = e.touches[0].clientY;
-    if (touchY - rect.top > 50) return;
-    dragRef.current = { startY: touchY, currentY: touchY, dragging: true };
+    dragRef.current = { startY: e.touches[0].clientY, currentY: e.touches[0].clientY, dragging: true };
   }, []);
 
   const handleTouchMove = useCallback((e) => {
@@ -145,6 +163,7 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
     const delta = touchY - dragRef.current.startY;
     if (delta > 0 && sheetRef.current) {
       sheetRef.current.style.transform = `translateY(${delta}px)`;
+      sheetRef.current.style.transition = 'none';
     }
   }, []);
 
@@ -153,45 +172,55 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
     const delta = dragRef.current.currentY - dragRef.current.startY;
     dragRef.current.dragging = false;
     if (sheetRef.current) {
+      sheetRef.current.style.transition = 'transform 0.3s ease';
       sheetRef.current.style.transform = '';
     }
-    if (delta > 100) {
+    if (delta > 80) {
       onClose();
     }
   }, [onClose]);
+
+  // Handle bar specific touch (doesn't interfere with scrolling)
+  const handleHandleTouchStart = useCallback((e) => {
+    dragRef.current = { startY: e.touches[0].clientY, currentY: e.touches[0].clientY, dragging: true };
+  }, []);
 
   if (!open) return null;
 
   const opts = filterOptions || { communities: [], property_names: [], types: [], sources: [] };
   const minDip = parseFloat(localFilters.min_dip || 0);
+  const countDisplay = countLoading ? '—' : (liveCount != null ? liveCount.toLocaleString() : '...');
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 z-40 sheet-overlay" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />
       <div
         ref={sheetRef}
-        className="fixed inset-x-0 bottom-0 z-50 bg-bg rounded-t-2xl max-h-[85vh] flex flex-col sheet-content"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        className="fixed inset-x-0 bottom-0 z-50 bg-bg rounded-t-2xl max-h-[85vh] flex flex-col overflow-hidden"
+        style={{ maxWidth: '100vw' }}
       >
-        {/* Handle — swipe target */}
-        <div className="flex justify-center pt-3 pb-1 cursor-grab">
+        {/* Handle — drag target */}
+        <div
+          className="flex justify-center pt-3 pb-2 cursor-grab touch-none"
+          onTouchStart={handleHandleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
           <div className="w-10 h-1 rounded-full bg-border" />
         </div>
 
-        <div className="overflow-y-auto flex-1 px-4 pb-4 space-y-5">
+        <div className="overflow-y-auto overflow-x-hidden flex-1 px-4 pb-4 space-y-5" style={{ overscrollBehavior: 'contain' }}>
           {/* Date listed */}
           <div>
             <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">Date listed</div>
             <div className="flex gap-2 mb-2">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <label className="text-[10px] text-muted">From</label>
                 <input type="date" value={localFilters.date_from || ''}
                   onChange={e => setLocal('date_from', e.target.value)}
                   className="w-full bg-card border border-border rounded-lg px-3 py-2 text-white outline-none" />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <label className="text-[10px] text-muted">To</label>
                 <input type="date" value={localFilters.date_to || ''}
                   onChange={e => setLocal('date_to', e.target.value)}
@@ -252,7 +281,7 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
             </div>
           </div>
 
-          {/* Community — search + chips only */}
+          {/* Community */}
           <SearchChipSelect
             label="Community"
             placeholder="Search community..."
@@ -261,7 +290,7 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
             fetchUrl="/api/search-community"
           />
 
-          {/* Building — search + chips only */}
+          {/* Building */}
           <SearchChipSelect
             label="Building"
             placeholder="Search building..."
@@ -296,8 +325,8 @@ export default function FilterSheet({ open, onClose, filters, setFilter, setFilt
         {/* Footer */}
         <div className="border-t border-border px-4 py-3 flex items-center justify-between pb-[calc(12px+env(safe-area-inset-bottom))]">
           <button onClick={reset} className="text-sm text-muted min-h-[44px]">Reset all</button>
-          <button onClick={apply} className="bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-semibold min-h-[44px]">
-            Show {resultCount != null ? resultCount.toLocaleString() : '...'} results
+          <button onClick={apply} className={`bg-accent text-white px-6 py-2.5 rounded-xl text-sm font-semibold min-h-[44px] ${countLoading ? 'animate-pulse' : ''}`}>
+            Show {countDisplay} results
           </button>
         </div>
       </div>

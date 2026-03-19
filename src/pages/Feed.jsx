@@ -72,6 +72,20 @@ export default function Feed() {
     return () => window.removeEventListener('scroll', onScroll);
   }, [loadMore]);
 
+  // SSE: listen for database updates and auto-refresh
+  useEffect(() => {
+    let evtSource;
+    try {
+      evtSource = new EventSource('/api/events');
+      evtSource.onmessage = (e) => {
+        if (e.data === 'refresh') {
+          window.location.reload();
+        }
+      };
+    } catch {}
+    return () => evtSource?.close();
+  }, []);
+
   // Date filter chip display
   const hasDateFilter = filters.date_from || filters.date_to;
 
@@ -168,10 +182,6 @@ export default function Feed() {
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         filters={filters}
-        setFilter={setFilter}
-        setFilters={setFilters}
-        resetFilters={resetFilters}
-        resultCount={listingsData?.total}
         filterOptions={filterOptions}
       />
     </div>

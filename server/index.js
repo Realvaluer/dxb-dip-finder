@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import compression from 'compression';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import db from './db.js';
 
@@ -12,7 +13,7 @@ const PORT = process.env.PORT || 3001;
 
 app.use(helmet());
 app.use(compression());
-app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ function buildWhereClause(query) {
     params.min_sqft = parseInt(query.min_sqft, 10);
   }
 
-  // community[] multi-value — Express parses ?community[]=X into query.community (array)
+  // community[] multi-value
   const communities = toArray(query['community[]'] || query.community || query.community_arr);
   if (communities.length) {
     const placeholders = communities.map((_, i) => `@comm${i}`);
@@ -62,7 +63,7 @@ function buildWhereClause(query) {
     communities.forEach((c, i) => { params[`comm${i}`] = c; });
   }
 
-  // property_name[] multi-value — Express parses ?property_name[]=X into query.property_name (array)
+  // property_name[] multi-value
   const buildings = toArray(query['property_name[]'] || query.property_name || query.property_name_arr);
   if (buildings.length) {
     const placeholders = buildings.map((_, i) => `@bld${i}`);
@@ -90,7 +91,6 @@ function buildWhereClause(query) {
     }
   }
 
-  // Always dedup on reference_no to match the web app count (80,979 vs 81,081)
   conditions.unshift(DEDUP_CONDITION);
   return { where: 'WHERE ' + conditions.join(' AND '), params };
 }
@@ -100,10 +100,8 @@ function toArray(val) {
   return Array.isArray(val) ? val : [val];
 }
 
-// Dedup: the web app deduplicates by reference_no; 102 duplicate rows exist in the DB
 const DEDUP_CONDITION = `l.id IN (SELECT MIN(id) FROM listings GROUP BY reference_no)`;
 
-// Dip data is pre-computed by the scraper and stored in the dip_data table
 const DIP_JOIN = `LEFT JOIN dip_data d ON d.listing_id = l.id`;
 
 function dipSelectFields() {
@@ -134,6 +132,22 @@ function dipFilter(minDip) {
   return `AND (dip_percent IS NOT NULL AND dip_percent >= ${parseFloat(minDip)})`;
 }
 
+// Shared count query used by /api/listings and /api/listings/count
+function getFilteredCount(query) {
+  const { where, params } = buildWhereClause(query);
+  const minDip = query.min_dip;
+  const countSql = `
+    SELECT COUNT(*) as total FROM (
+      SELECT ${dipSelectFields()}
+      FROM listings l
+      ${DIP_JOIN}
+      ${where}
+    )
+    WHERE 1=1 ${dipFilter(minDip)}
+  `;
+  return db.prepare(countSql).get(params).total;
+}
+
 // ── GET /api/listings ────────────────────────────────────────────────────────
 
 app.get('/api/listings', (req, res) => {
@@ -157,26 +171,25 @@ app.get('/api/listings', (req, res) => {
     `;
 
     const rows = db.prepare(sql).all({ ...params, limit, offset });
-
-    // total count
-    const countSql = `
-      SELECT COUNT(*) as total FROM (
-        SELECT ${dipSelectFields()}
-        FROM listings l
-        ${DIP_JOIN}
-        ${where}
-      )
-      WHERE 1=1 ${dipFilter(minDip)}
-    `;
-    const { total } = db.prepare(countSql).get(params);
-
-    // strip title from response
+    const total = getFilteredCount(req.query);
     const cleaned = rows.map(({ title, ...rest }) => rest);
 
     res.json({ listings: cleaned, total });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch listings' });
+  }
+});
+
+// ── GET /api/listings/count — live count for filter sheet ────────────────────
+
+app.get('/api/listings/count', (req, res) => {
+  try {
+    const total = getFilteredCount(req.query);
+    res.json({ total });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to get count' });
   }
 });
 
@@ -200,7 +213,6 @@ app.get('/api/listings/:id', (req, res) => {
       ORDER BY edited_at DESC
     `).all({ id: row.id });
 
-    // Get previous URL from dip_data table
     const dipRow = db.prepare(`SELECT prev_url, prev_source FROM dip_data WHERE listing_id = @id`).get({ id: row.id });
 
     const { title, previous_url_from_dip, ...cleaned } = row;
@@ -361,6 +373,54 @@ app.get('/api/search-building', (req, res) => {
   } catch (err) { res.status(500).json([]); }
 });
 
+// ── GET /api/health ──────────────────────────────────────────────────────────
+
+app.get('/api/health', (req, res) => {
+  try {
+    const { total } = db.prepare('SELECT COUNT(*) as total FROM listings').get();
+    const dbInfo = db.prepare("SELECT file FROM pragma_database_list WHERE name='main'").get();
+    res.json({ total, db_path: dbInfo?.file || 'unknown', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SSE endpoint for live DB updates ─────────────────────────────────────────
+
+const sseClients = new Set();
+
+app.get('/api/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  res.write('data: connected\n\n');
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
+});
+
+// Watch database file for changes (local dev only — Railway uses volume)
+const dbPath = process.env.DB_PATH || path.join(import.meta.dirname || __dirname, '..', '..', 'scraper', 'database.db');
+try {
+  const actualDbPath = db.prepare("SELECT file FROM pragma_database_list WHERE name='main'").get()?.file;
+  if (actualDbPath && fs.existsSync(actualDbPath)) {
+    let debounce = null;
+    fs.watch(actualDbPath, () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        console.log('Database updated at', new Date().toISOString());
+        sseClients.forEach(client => {
+          try { client.write('data: refresh\n\n'); } catch {}
+        });
+      }, 2000);
+    });
+    console.log('Watching database for changes:', actualDbPath);
+  }
+} catch (e) {
+  // File watching is optional — ignore errors
+}
+
 // ── static files (production) ────────────────────────────────────────────────
 
 const distPath = path.join(__dirname, '..', 'dist');
@@ -373,4 +433,6 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Dip Finder running on http://0.0.0.0:${PORT}`);
+  const { total } = db.prepare('SELECT COUNT(*) as total FROM listings').get();
+  console.log(`Database: ${total} listings`);
 });
