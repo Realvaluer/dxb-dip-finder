@@ -41,6 +41,9 @@ function buildWhereClause(query) {
     const bed = parseInt(query.bedrooms, 10);
     if (bed === 4) {
       conditions.push(`l.bedrooms >= 4`);
+    } else if (bed === 0) {
+      // Studio: bedrooms is NULL or 0 in the DB
+      conditions.push(`(l.bedrooms IS NULL OR l.bedrooms = 0)`);
     } else {
       conditions.push(`l.bedrooms = @bedrooms`);
       params.bedrooms = bed;
@@ -213,13 +216,30 @@ app.get('/api/listings/:id', (req, res) => {
       ORDER BY edited_at DESC
     `).all({ id: row.id });
 
-    const dipRow = db.prepare(`SELECT prev_url, prev_source FROM dip_data WHERE listing_id = @id`).get({ id: row.id });
+    const dipRow = db.prepare(`
+      SELECT d.prev_url, d.prev_source, d.prev_price, d.prev_date, d.prev_size,
+             d.prev_furnished, d.ref_listing_id,
+             ref.url AS ref_url, ref.property_name AS ref_name, ref.community AS ref_community
+      FROM dip_data d
+      LEFT JOIN listings ref ON ref.id = d.ref_listing_id
+      WHERE d.listing_id = @id
+    `).get({ id: row.id });
 
     const { title, previous_url_from_dip, ...cleaned } = row;
     res.json({
       ...cleaned,
       price_history: history,
       previous_url: previous_url_from_dip || dipRow?.prev_url || null,
+      comparison: dipRow ? {
+        url: dipRow.prev_url || dipRow.ref_url || null,
+        source: dipRow.prev_source || null,
+        price: dipRow.prev_price || null,
+        date: dipRow.prev_date || null,
+        size: dipRow.prev_size || null,
+        furnished: dipRow.prev_furnished || null,
+        property_name: dipRow.ref_name || null,
+        community: dipRow.ref_community || null,
+      } : null,
     });
   } catch (err) {
     console.error(err);
@@ -266,11 +286,13 @@ app.get('/api/kpis', (req, res) => {
       ORDER BY count DESC LIMIT 1
     `).get(params);
 
+    // Use the max date_listed in the DB as "today" (handles timezone mismatch)
+    const latestDate = db.prepare(`SELECT MAX(date_listed) as d FROM listings`).get()?.d;
     const newToday = db.prepare(`
       SELECT COUNT(*) as count
       FROM (${baseSql})
-      WHERE date_listed = date('now')
-    `).get(params);
+      WHERE date_listed = @latestDate
+    `).get({ ...params, latestDate: latestDate || '' });
 
     res.json({
       highest_dip_pct: highestPct || null,

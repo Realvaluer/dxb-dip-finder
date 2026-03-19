@@ -71,7 +71,7 @@ export default function ListingDetail() {
         {/* Metadata chips */}
         <div className="flex flex-wrap gap-2">
           {[
-            l.bedrooms === 0 ? 'Studio' : `${l.bedrooms} Beds`,
+            (l.bedrooms === 0 || l.bedrooms === null) ? 'Studio' : `${l.bedrooms} Beds`,
             l.size_sqft ? `${l.size_sqft.toLocaleString()} sqft` : null,
             l.furnished,
             aedPerSqft ? `AED ${aedPerSqft.toLocaleString()}/sqft` : null,
@@ -118,16 +118,23 @@ export default function ListingDetail() {
                 </div>
               </div>
 
-              {/* Previous listing link */}
-              {l.previous_url && (
-                <a
-                  href={l.previous_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 flex items-center gap-2 text-accent text-xs hover:underline"
-                >
-                  → View previous listing on {l.source}
-                </a>
+              {/* Comparison listing links */}
+              {(l.previous_url || l.comparison?.url) && (
+                <div className="mt-3 space-y-2">
+                  {l.previous_url && (
+                    <a href={l.previous_url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-accent text-xs hover:underline">
+                      → View previous listing{l.comparison?.source ? ` on ${l.comparison.source}` : ''}
+                    </a>
+                  )}
+                  {l.comparison?.url && l.comparison.url !== l.previous_url && (
+                    <a href={l.comparison.url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-accent text-xs hover:underline">
+                      → View compared listing{l.comparison.source ? ` on ${l.comparison.source}` : ''}
+                      {l.comparison.property_name ? ` (${l.comparison.property_name})` : ''}
+                    </a>
+                  )}
+                </div>
               )}
             </div>
 
