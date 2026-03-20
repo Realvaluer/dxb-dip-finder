@@ -458,11 +458,13 @@ registerAuthRoutes(app);
 // ── Saved listings routes ────────────────────────────────────────────────────
 
 app.get('/api/saved/ids', requireAuth, (req, res) => {
+  if (!usersDb) return res.json([]);
   const rows = usersDb.prepare(`SELECT listing_id FROM saved_listings WHERE user_id = ?`).all(req.user.user_id);
   res.json(rows.map(r => r.listing_id));
 });
 
 app.get('/api/saved', requireAuth, (req, res) => {
+  if (!usersDb) return res.json({ listings: [], total: 0 });
   try {
     const savedIds = usersDb.prepare(`SELECT listing_id FROM saved_listings WHERE user_id = ? ORDER BY saved_at DESC`).all(req.user.user_id);
     if (savedIds.length === 0) return res.json({ listings: [], total: 0 });
@@ -488,11 +490,13 @@ app.get('/api/saved', requireAuth, (req, res) => {
 });
 
 app.post('/api/saved/:listing_id', requireAuth, (req, res) => {
+  if (!usersDb) return res.status(503).json({ error: 'Auth not available' });
   usersDb.prepare(`INSERT OR IGNORE INTO saved_listings (user_id, listing_id) VALUES (?, ?)`).run(req.user.user_id, parseInt(req.params.listing_id));
   res.json({ saved: true });
 });
 
 app.delete('/api/saved/:listing_id', requireAuth, (req, res) => {
+  if (!usersDb) return res.status(503).json({ error: 'Auth not available' });
   usersDb.prepare(`DELETE FROM saved_listings WHERE user_id = ? AND listing_id = ?`).run(req.user.user_id, parseInt(req.params.listing_id));
   res.json({ saved: false });
 });

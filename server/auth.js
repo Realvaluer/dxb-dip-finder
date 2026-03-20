@@ -12,6 +12,8 @@ const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 export function requireAuth(req, res, next) {
+  if (!usersDb) return res.status(503).json({ error: 'Auth not available' });
+
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
 
@@ -32,6 +34,7 @@ export function registerAuthRoutes(app) {
 
   // Send verification code
   app.post('/api/auth/send-code', async (req, res) => {
+    if (!usersDb) return res.status(503).json({ error: 'Auth not available' });
     try {
       const { email } = req.body;
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -82,6 +85,7 @@ export function registerAuthRoutes(app) {
 
   // Verify code
   app.post('/api/auth/verify-code', (req, res) => {
+    if (!usersDb) return res.status(503).json({ error: 'Auth not available' });
     try {
       const { email, code } = req.body;
       if (!email || !code) return res.status(400).json({ error: 'Email and code required' });
