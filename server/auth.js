@@ -3,8 +3,15 @@ import { usersDb } from './db.js';
 
 let resend = null;
 if (process.env.RESEND_API_KEY) {
-  const { Resend } = await import('resend');
-  resend = new Resend(process.env.RESEND_API_KEY);
+  try {
+    const { Resend } = await import('resend');
+    resend = new Resend(process.env.RESEND_API_KEY);
+    console.log('[AUTH] Resend SDK initialized, from:', process.env.FROM_EMAIL || 'onboarding@resend.dev');
+  } catch (err) {
+    console.error('[AUTH] Failed to init Resend:', err.message);
+  }
+} else {
+  console.log('[AUTH] No RESEND_API_KEY — emails will be logged to console');
 }
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
@@ -61,7 +68,7 @@ export function registerAuthRoutes(app) {
 
       // Send email via Resend
       if (resend) {
-        await resend.emails.send({
+        const result = await resend.emails.send({
           from: FROM_EMAIL,
           to: email,
           subject: 'Your Dip Finder code',
@@ -72,8 +79,9 @@ export function registerAuthRoutes(app) {
             <p style="color: #999;">If you did not request this, ignore this email.</p>
           `,
         });
+        console.log('[AUTH] Resend result:', JSON.stringify(result));
       } else {
-        console.log(`[DEV] Auth code for ${email}: ${code}`);
+        console.log(`[DEV] Auth code for ${email}: ${code} (Resend not initialized)`);
       }
 
       res.json({ success: true });
