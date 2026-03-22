@@ -409,7 +409,7 @@ app.get('/api/health', (req, res) => {
   try {
     const { total } = db.prepare('SELECT COUNT(*) as total FROM listings').get();
     const dbInfo = db.prepare("SELECT file FROM pragma_database_list WHERE name='main'").get();
-    res.json({ total, db_path: dbInfo?.file || 'unknown', timestamp: new Date().toISOString() });
+    res.json({ total, db_path: dbInfo?.file || 'unknown', timestamp: new Date().toISOString(), resend_configured: !!process.env.RESEND_API_KEY, users_db: !!usersDb });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
