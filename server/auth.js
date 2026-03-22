@@ -1,20 +1,16 @@
 import crypto from 'crypto';
+import { Resend } from 'resend';
 import { usersDb } from './db.js';
 
 let resend = null;
-if (process.env.RESEND_API_KEY) {
-  try {
-    const { Resend } = await import('resend');
-    resend = new Resend(process.env.RESEND_API_KEY);
-    console.log('[AUTH] Resend SDK initialized, from:', process.env.FROM_EMAIL || 'onboarding@resend.dev');
-  } catch (err) {
-    console.error('[AUTH] Failed to init Resend:', err.message);
-  }
-} else {
-  console.log('[AUTH] No RESEND_API_KEY — emails will be logged to console');
-}
-
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+  console.log('[AUTH] Resend initialized, from:', FROM_EMAIL);
+} else {
+  console.log('[AUTH] No RESEND_API_KEY — emails logged to console only');
+}
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
@@ -69,7 +65,7 @@ export function registerAuthRoutes(app) {
       // Send email via Resend
       if (resend) {
         const result = await resend.emails.send({
-          from: FROM_EMAIL,
+          from: `Dip Finder <${FROM_EMAIL}>`,
           to: email,
           subject: 'Your Dip Finder code',
           html: `
