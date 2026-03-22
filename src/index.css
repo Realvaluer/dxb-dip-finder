@@ -16,6 +16,13 @@ input, select, textarea {
   font-size: 16px !important;
 }
 
+/* Allow smaller inputs on desktop where iOS zoom isn't an issue */
+@media (min-width: 1024px) {
+  input, select, textarea {
+    font-size: inherit !important;
+  }
+}
+
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
