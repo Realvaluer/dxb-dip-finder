@@ -1,8 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
-import Database from 'better-sqlite3';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+
+// Try to load better-sqlite3 (optional — fails on some cloud environments)
+let Database = null;
+try {
+  Database = (await import('better-sqlite3')).default;
+} catch {
+  console.log('better-sqlite3 not available — users DB disabled (auth features off)');
+}
 
 // ── Supabase (listings data) ──────────────────────────────────────────────────
 
@@ -18,7 +25,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // ── Users DB (auth, saved listings) — still SQLite ─────────────────────────────
 
 let usersDb = null;
-try {
+if (!Database) {
+  console.log('Skipping users DB — better-sqlite3 not available');
+} else try {
   const usersDbPath = process.env.USERS_DB_PATH
     || (process.env.DB_PATH ? path.join(path.dirname(process.env.DB_PATH), 'users.db') : null)
     || path.join(os.homedir(), 'Desktop', 'Claude', 'Mobile App for Dip Finder', 'users.db');
