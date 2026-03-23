@@ -1,25 +1,28 @@
+import { createClient } from '@supabase/supabase-js';
 import Database from 'better-sqlite3';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { ensureDatabase } from './seed-db.js';
 
-// On Railway: download listings DB to volume if needed
-await ensureDatabase();
+// ── Supabase (listings data) ──────────────────────────────────────────────────
 
-// Listings DB — read-only, never written to by this app
-const dbPath = process.env.DB_PATH || path.join(os.homedir(), 'Desktop', 'Claude', 'scraper', 'database.db');
-const db = new Database(dbPath, { readonly: true });
-db.pragma('query_only = ON');
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://xrdrypydnnaemmyvgjee.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '';
 
-// Users DB — read-write, for auth, saved listings, notifications
+if (!SUPABASE_KEY) {
+  console.error('WARNING: No SUPABASE_SERVICE_KEY set — listings API will fail');
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── Users DB (auth, saved listings) — still SQLite ─────────────────────────────
+
 let usersDb = null;
 try {
   const usersDbPath = process.env.USERS_DB_PATH
     || (process.env.DB_PATH ? path.join(path.dirname(process.env.DB_PATH), 'users.db') : null)
     || path.join(os.homedir(), 'Desktop', 'Claude', 'Mobile App for Dip Finder', 'users.db');
 
-  // Ensure parent directory exists
   const usersDir = path.dirname(usersDbPath);
   if (!fs.existsSync(usersDir)) {
     fs.mkdirSync(usersDir, { recursive: true });
@@ -29,7 +32,6 @@ try {
   usersDb.pragma('journal_mode = WAL');
   usersDb.pragma('foreign_keys = ON');
 
-  // Create tables on startup
   usersDb.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,4 +74,4 @@ try {
   usersDb = null;
 }
 
-export { db as default, usersDb };
+export { supabase as default, supabase, usersDb };

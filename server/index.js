@@ -3,14 +3,15 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import compression from 'compression';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
-import db, { usersDb } from './db.js';
+import { supabase, usersDb } from './db.js';
 import { registerAuthRoutes, requireAuth } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const TABLE = 'ddf_listings';
 
 app.use(helmet());
 app.use(compression());
@@ -19,85 +20,44 @@ app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function buildWhereClause(query) {
-  const conditions = [];
-  const params = {};
+// The select fields we use for listings (map Supabase columns to API shape)
+const LISTING_SELECT = [
+  'id', 'reference_no', 'source', 'scraped_at', 'date_listed', 'purpose',
+  'community', 'property_name', 'type', 'bedrooms', 'bathrooms',
+  'size_sqft', 'furnished', 'price_aed', 'price_sqft', 'listing_change',
+  'broker_agency', 'url', 'lat', 'lng',
+  'dip_pct', 'dip_price', 'dip_ref_id'
+].join(',');
 
-  if (query.search) {
-    conditions.push(`(l.community LIKE @search OR l.property_name LIKE @search)`);
-    params.search = `%${query.search}%`;
-  }
-  if (query.purpose) {
-    conditions.push(`LOWER(l.purpose) = @purpose`);
-    params.purpose = query.purpose.toLowerCase();
-  }
-  if (query.type) {
-    conditions.push(`l.type = @type`);
-    params.type = query.type;
-  }
-  if (query.source) {
-    conditions.push(`l.source = @source`);
-    params.source = query.source;
-  }
-  if (query.bedrooms !== undefined && query.bedrooms !== null && query.bedrooms !== '') {
-    const bed = parseInt(query.bedrooms, 10);
-    if (bed === 4) {
-      conditions.push(`l.bedrooms >= 4`);
-    } else if (bed === 0) {
-      // Studio: bedrooms is NULL or 0 in the DB
-      conditions.push(`(l.bedrooms IS NULL OR l.bedrooms = 0)`);
-    } else {
-      conditions.push(`l.bedrooms = @bedrooms`);
-      params.bedrooms = bed;
-    }
-  }
-  if (query.max_price) {
-    conditions.push(`l.price_aed <= @max_price`);
-    params.max_price = parseInt(query.max_price, 10);
-  }
-  if (query.min_sqft) {
-    conditions.push(`l.size_sqft >= @min_sqft`);
-    params.min_sqft = parseInt(query.min_sqft, 10);
-  }
-
-  // community[] multi-value
-  const communities = toArray(query['community[]'] || query.community || query.community_arr);
-  if (communities.length) {
-    const placeholders = communities.map((_, i) => `@comm${i}`);
-    conditions.push(`l.community IN (${placeholders.join(',')})`);
-    communities.forEach((c, i) => { params[`comm${i}`] = c; });
-  }
-
-  // property_name[] multi-value
-  const buildings = toArray(query['property_name[]'] || query.property_name || query.property_name_arr);
-  if (buildings.length) {
-    const placeholders = buildings.map((_, i) => `@bld${i}`);
-    conditions.push(`l.property_name IN (${placeholders.join(',')})`);
-    buildings.forEach((b, i) => { params[`bld${i}`] = b; });
-  }
-
-  // date range filter
-  if (query.date_from) {
-    conditions.push(`date(l.date_listed) >= @date_from`);
-    params.date_from = query.date_from;
-  }
-  if (query.date_to) {
-    conditions.push(`date(l.date_listed) <= @date_to`);
-    params.date_to = query.date_to;
-  }
-
-  // ids filter (for bookmarks)
-  if (query.ids) {
-    const idList = query.ids.split(',').map(Number).filter(n => !isNaN(n));
-    if (idList.length > 0) {
-      const placeholders = idList.map((_, i) => `@id${i}`);
-      conditions.push(`l.id IN (${placeholders.join(',')})`);
-      idList.forEach((id, i) => { params[`id${i}`] = id; });
-    }
-  }
-
-  conditions.unshift(DEDUP_CONDITION);
-  return { where: 'WHERE ' + conditions.join(' AND '), params };
+function mapRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    reference_no: row.reference_no,
+    source: row.source,
+    scraped_at: row.scraped_at,
+    date_listed: row.date_listed,
+    purpose: row.purpose,
+    community: row.community,
+    property_name: row.property_name,
+    type: row.type,
+    bedrooms: row.bedrooms,
+    bathrooms: row.bathrooms,
+    size_sqft: row.size_sqft,
+    furnished: row.furnished,
+    price_aed: row.price_aed,
+    price_sqft: row.price_sqft,
+    listing_change: row.listing_change,
+    broker_agency: row.broker_agency,
+    url: row.url,
+    lat: row.lat,
+    lng: row.lng,
+    // Map dip columns to the change_pct / change_aed the frontend expects
+    change_pct: row.dip_pct != null && row.dip_pct !== 0 ? Math.round(row.dip_pct * 10) / 10 : null,
+    change_aed: row.dip_price != null && row.dip_price !== 0 ? row.dip_price : null,
+    previous_price: null, // Not stored separately in Supabase schema
+    price_changed_at: null,
+  };
 }
 
 function toArray(val) {
@@ -105,317 +65,438 @@ function toArray(val) {
   return Array.isArray(val) ? val : [val];
 }
 
-const DEDUP_CONDITION = `l.id IN (SELECT MIN(id) FROM listings GROUP BY reference_no)`;
-
-const DIP_JOIN = `LEFT JOIN dip_data d ON d.listing_id = l.id`;
-
-function dipSelectFields() {
-  return `
-    l.*,
-    d.prev_price AS previous_price,
-    d.prev_date AS price_changed_at,
-    d.prev_url AS previous_url_from_dip,
-    d.prev_source AS prev_source,
-    CASE WHEN d.dip_pct IS NOT NULL AND d.dip_pct != 0
-      THEN ROUND(d.dip_pct, 1) ELSE NULL END AS change_pct,
-    CASE WHEN d.dip_amount IS NOT NULL AND d.dip_amount != 0
-      THEN d.dip_amount ELSE NULL END AS change_aed
-  `;
-}
-
-function sortClause(sort) {
-  switch (sort) {
-    case 'dip_aed': return 'ORDER BY change_aed IS NULL, change_aed ASC, date(date_listed) DESC';
-    case 'dip_pct': return 'ORDER BY change_pct IS NULL, change_pct ASC, date(date_listed) DESC';
-    case 'price_asc': return 'ORDER BY price_aed ASC';
-    case 'price_desc': return 'ORDER BY price_aed DESC';
-    case 'newest':
-    default: return 'ORDER BY date(date_listed) DESC, community ASC, property_name ASC';
+// Apply filters to a Supabase query
+function applyFilters(query, params) {
+  if (params.search) {
+    query = query.or(`community.ilike.%${params.search}%,property_name.ilike.%${params.search}%`);
   }
+  if (params.purpose) {
+    query = query.ilike('purpose', params.purpose);
+  }
+  if (params.type) {
+    query = query.eq('type', params.type);
+  }
+  if (params.source) {
+    query = query.eq('source', params.source);
+  }
+  if (params.bedrooms !== undefined && params.bedrooms !== null && params.bedrooms !== '') {
+    const bed = parseInt(params.bedrooms, 10);
+    if (bed === 4) {
+      query = query.gte('bedrooms', '4');
+    } else if (bed === 0) {
+      query = query.or('bedrooms.is.null,bedrooms.eq.0');
+    } else {
+      query = query.eq('bedrooms', String(bed));
+    }
+  }
+  if (params.max_price) {
+    query = query.lte('price_aed', parseInt(params.max_price, 10));
+  }
+  if (params.min_sqft) {
+    query = query.gte('size_sqft', parseInt(params.min_sqft, 10));
+  }
+
+  const communities = toArray(params['community[]'] || params.community_arr);
+  if (communities.length) {
+    query = query.in('community', communities);
+  }
+
+  const buildings = toArray(params['property_name[]'] || params.property_name_arr);
+  if (buildings.length) {
+    query = query.in('property_name', buildings);
+  }
+
+  if (params.date_from) {
+    query = query.gte('date_listed', params.date_from);
+  }
+  if (params.date_to) {
+    query = query.lte('date_listed', params.date_to);
+  }
+
+  if (params.min_dip && parseFloat(params.min_dip) > 0) {
+    query = query.not('dip_pct', 'is', null).lte('dip_pct', -parseFloat(params.min_dip));
+  }
+
+  if (params.ids) {
+    const idList = params.ids.split(',').map(Number).filter(n => !isNaN(n));
+    if (idList.length > 0) {
+      query = query.in('id', idList);
+    }
+  }
+
+  return query;
 }
 
-function dipFilter(minDip) {
-  if (!minDip || parseFloat(minDip) <= 0) return '';
-  // min_dip filters for price drops only (change_pct is negative for drops)
-  return `AND (change_pct IS NOT NULL AND change_pct <= -${parseFloat(minDip)})`;
-}
-
-// Shared count query used by /api/listings and /api/listings/count
-function getFilteredCount(query) {
-  const { where, params } = buildWhereClause(query);
-  const minDip = query.min_dip;
-  const countSql = `
-    SELECT COUNT(*) as total FROM (
-      SELECT ${dipSelectFields()}
-      FROM listings l
-      ${DIP_JOIN}
-      ${where}
-    )
-    WHERE 1=1 ${dipFilter(minDip)}
-  `;
-  return db.prepare(countSql).get(params).total;
+function applySort(query, sort) {
+  switch (sort) {
+    case 'dip_pct':
+      return query.order('dip_pct', { ascending: true, nullsFirst: false });
+    case 'dip_aed':
+      return query.order('dip_price', { ascending: true, nullsFirst: false });
+    case 'price_asc':
+      return query.order('price_aed', { ascending: true });
+    case 'price_desc':
+      return query.order('price_aed', { ascending: false });
+    case 'newest':
+    default:
+      return query.order('date_listed', { ascending: false }).order('community', { ascending: true });
+  }
 }
 
 // ── GET /api/listings ────────────────────────────────────────────────────────
 
-app.get('/api/listings', (req, res) => {
+app.get('/api/listings', async (req, res) => {
   try {
-    const { where, params } = buildWhereClause(req.query);
-    const sort = sortClause(req.query.sort);
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = parseInt(req.query.offset, 10) || 0;
-    const minDip = req.query.min_dip;
 
-    const sql = `
-      SELECT * FROM (
-        SELECT ${dipSelectFields()}
-        FROM listings l
-        ${DIP_JOIN}
-        ${where}
-      )
-      WHERE 1=1 ${dipFilter(minDip)}
-      ${sort}
-      LIMIT @limit OFFSET @offset
-    `;
+    let query = supabase
+      .from(TABLE)
+      .select(LISTING_SELECT, { count: 'exact' })
+      .eq('is_valid', true)
+      .range(offset, offset + limit - 1);
 
-    const rows = db.prepare(sql).all({ ...params, limit, offset });
-    const total = getFilteredCount(req.query);
-    const cleaned = rows.map(({ title, ...rest }) => rest);
+    query = applyFilters(query, req.query);
+    query = applySort(query, req.query.sort);
 
-    res.json({ listings: cleaned, total });
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    res.json({
+      listings: (data || []).map(mapRow),
+      total: count || 0,
+    });
   } catch (err) {
-    console.error(err);
+    console.error('Listings error:', err);
     res.status(500).json({ error: 'Failed to fetch listings' });
   }
 });
 
-// ── GET /api/listings/count — live count for filter sheet ────────────────────
+// ── GET /api/listings/count ──────────────────────────────────────────────────
 
-app.get('/api/listings/count', (req, res) => {
+app.get('/api/listings/count', async (req, res) => {
   try {
-    const total = getFilteredCount(req.query);
-    res.json({ total });
+    let query = supabase
+      .from(TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('is_valid', true);
+
+    query = applyFilters(query, req.query);
+
+    const { count, error } = await query;
+    if (error) throw error;
+
+    res.json({ total: count || 0 });
   } catch (err) {
-    console.error(err);
+    console.error('Count error:', err);
     res.status(500).json({ error: 'Failed to get count' });
   }
 });
 
 // ── GET /api/listings/:id ────────────────────────────────────────────────────
 
-app.get('/api/listings/:id', (req, res) => {
+app.get('/api/listings/:id', async (req, res) => {
   try {
-    const sql = `
-      SELECT ${dipSelectFields()}
-      FROM listings l
-      ${DIP_JOIN}
-      WHERE l.id = @id
-    `;
-    const row = db.prepare(sql).get({ id: parseInt(req.params.id, 10) });
-    if (!row) return res.status(404).json({ error: 'Not found' });
+    const id = parseInt(req.params.id, 10);
 
-    const history = db.prepare(`
-      SELECT old_value, new_value, edited_at
-      FROM edits
-      WHERE listing_id = @id AND field_name = 'price_aed'
-      ORDER BY edited_at DESC
-    `).all({ id: row.id });
+    const { data: row, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    const dipRow = db.prepare(`
-      SELECT d.prev_url, d.prev_source, d.prev_price, d.prev_date, d.prev_size,
-             d.prev_furnished, d.ref_listing_id,
-             ref.url AS ref_url, ref.property_name AS ref_name, ref.community AS ref_community
-      FROM dip_data d
-      LEFT JOIN listings ref ON ref.id = d.ref_listing_id
-      WHERE d.listing_id = @id
-    `).get({ id: row.id });
+    if (error || !row) return res.status(404).json({ error: 'Not found' });
 
-    const { title, previous_url_from_dip, ...cleaned } = row;
+    // Get edits (price history) from ddf_edits
+    const { data: edits } = await supabase
+      .from('ddf_edits')
+      .select('old_value, new_value, edited_at')
+      .eq('listing_id', id)
+      .eq('field_name', 'price_aed')
+      .order('edited_at', { ascending: false });
+
+    // Get comparison listing if dip_ref_id exists
+    let comparison = null;
+    if (row.dip_ref_id) {
+      const { data: ref } = await supabase
+        .from(TABLE)
+        .select('url, source, price_aed, date_listed, size_sqft, furnished, property_name, community')
+        .eq('id', row.dip_ref_id)
+        .single();
+
+      if (ref) {
+        comparison = {
+          url: ref.url,
+          source: ref.source,
+          price: ref.price_aed,
+          date: ref.date_listed,
+          size: ref.size_sqft,
+          furnished: ref.furnished,
+          property_name: ref.property_name,
+          community: ref.community,
+        };
+      }
+    }
+
+    const mapped = mapRow(row);
     res.json({
-      ...cleaned,
-      price_history: history,
-      previous_url: previous_url_from_dip || dipRow?.prev_url || null,
-      comparison: dipRow ? {
-        url: dipRow.prev_url || dipRow.ref_url || null,
-        source: dipRow.prev_source || null,
-        price: dipRow.prev_price || null,
-        date: dipRow.prev_date || null,
-        size: dipRow.prev_size || null,
-        furnished: dipRow.prev_furnished || null,
-        property_name: dipRow.ref_name || null,
-        community: dipRow.ref_community || null,
-      } : null,
+      ...mapped,
+      price_history: edits || [],
+      comparison,
     });
   } catch (err) {
-    console.error(err);
+    console.error('Listing detail error:', err);
     res.status(500).json({ error: 'Failed to fetch listing' });
   }
 });
 
 // ── GET /api/kpis ────────────────────────────────────────────────────────────
 
-app.get('/api/kpis', (req, res) => {
+app.get('/api/kpis', async (req, res) => {
   try {
-    const { where, params } = buildWhereClause(req.query);
-    const minDip = req.query.min_dip;
+    // Biggest % drop
+    let pctQuery = supabase
+      .from(TABLE)
+      .select('id, dip_pct, property_name, community')
+      .eq('is_valid', true)
+      .not('dip_pct', 'is', null)
+      .lt('dip_pct', 0)
+      .order('dip_pct', { ascending: true })
+      .limit(1);
+    pctQuery = applyFilters(pctQuery, req.query);
+    const { data: pctData } = await pctQuery;
 
-    const baseSql = `
-      SELECT * FROM (
-        SELECT ${dipSelectFields()}
-        FROM listings l
-        ${DIP_JOIN}
-        ${where}
-      )
-      WHERE 1=1 ${dipFilter(minDip)}
-    `;
+    // Biggest AED drop
+    let aedQuery = supabase
+      .from(TABLE)
+      .select('id, dip_price, property_name, community')
+      .eq('is_valid', true)
+      .not('dip_price', 'is', null)
+      .lt('dip_price', 0)
+      .order('dip_price', { ascending: true })
+      .limit(1);
+    aedQuery = applyFilters(aedQuery, req.query);
+    const { data: aedData } = await aedQuery;
 
-    // Biggest price drop = most negative change_pct
-    const highestPct = db.prepare(`
-      SELECT id AS listing_id, change_pct, property_name, community
-      FROM (${baseSql})
-      WHERE change_pct IS NOT NULL AND change_pct < 0
-      ORDER BY change_pct ASC LIMIT 1
-    `).get(params);
+    // Most active community — fetch enough data to aggregate
 
-    // Biggest AED drop = most negative change_aed
-    const highestAed = db.prepare(`
-      SELECT id AS listing_id, change_aed, property_name, community
-      FROM (${baseSql})
-      WHERE change_aed IS NOT NULL AND change_aed < 0
-      ORDER BY change_aed ASC LIMIT 1
-    `).get(params);
+    // Latest date for "new today"
+    const { data: latestRow } = await supabase
+      .from(TABLE)
+      .select('date_listed')
+      .eq('is_valid', true)
+      .order('date_listed', { ascending: false })
+      .limit(1)
+      .single();
+    const latestDate = latestRow?.date_listed;
 
-    // Most active = community with most price changes (any direction)
-    const mostActive = db.prepare(`
-      SELECT community, COUNT(*) as count
-      FROM (${baseSql})
-      WHERE change_pct IS NOT NULL
-      GROUP BY community
-      ORDER BY count DESC LIMIT 1
-    `).get(params);
+    let todayQuery = supabase
+      .from(TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('is_valid', true)
+      .eq('date_listed', latestDate || '');
+    todayQuery = applyFilters(todayQuery, req.query);
+    const { count: newToday } = await todayQuery;
 
-    // Use the max date_listed in the DB as "today" (handles timezone mismatch)
-    const latestDate = db.prepare(`SELECT MAX(date_listed) as d FROM listings`).get()?.d;
-    const newToday = db.prepare(`
-      SELECT COUNT(*) as count
-      FROM (${baseSql})
-      WHERE date_listed = @latestDate
-    `).get({ ...params, latestDate: latestDate || '' });
+    let mostActive = null;
+    {
+      // Fetch communities with price changes — paginate to get enough data
+      let allComm = [];
+      let from = 0;
+      const batchSize = 1000;
+      for (let i = 0; i < 10; i++) { // max 10k rows
+        const { data: batch } = await supabase
+          .from(TABLE)
+          .select('community')
+          .eq('is_valid', true)
+          .not('dip_pct', 'is', null)
+          .range(from, from + batchSize - 1);
+        if (!batch || batch.length === 0) break;
+        allComm = allComm.concat(batch);
+        if (batch.length < batchSize) break;
+        from += batchSize;
+      }
+      if (allComm.length) {
+        const counts = {};
+        allComm.forEach(r => { if (r.community) counts[r.community] = (counts[r.community] || 0) + 1; });
+        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+        if (top) mostActive = { community: top[0], count: top[1] };
+      }
+    }
+
+    const highestPct = pctData?.[0] ? {
+      listing_id: pctData[0].id,
+      change_pct: Math.round(pctData[0].dip_pct * 10) / 10,
+      property_name: pctData[0].property_name,
+      community: pctData[0].community,
+    } : null;
+
+    const highestAed = aedData?.[0] ? {
+      listing_id: aedData[0].id,
+      change_aed: aedData[0].dip_price,
+      property_name: aedData[0].property_name,
+      community: aedData[0].community,
+    } : null;
 
     res.json({
-      highest_dip_pct: highestPct || null,
-      highest_dip_aed: highestAed || null,
-      most_active_community: mostActive || null,
-      new_today: newToday?.count || 0,
+      highest_dip_pct: highestPct,
+      highest_dip_aed: highestAed,
+      most_active_community: mostActive,
+      new_today: newToday || 0,
     });
   } catch (err) {
-    console.error(err);
+    console.error('KPIs error:', err);
     res.status(500).json({ error: 'Failed to fetch KPIs' });
   }
 });
 
 // ── GET /api/filter-options ──────────────────────────────────────────────────
 
-app.get('/api/filter-options', (req, res) => {
+app.get('/api/filter-options', async (req, res) => {
   try {
-    const communities = db.prepare(
-      `SELECT DISTINCT community FROM listings WHERE community IS NOT NULL ORDER BY community`
-    ).all().map(r => r.community);
+    // Supabase doesn't have DISTINCT — fetch unique values
+    const [commRes, typeRes, sourceRes, purposeRes] = await Promise.all([
+      supabase.from(TABLE).select('community').eq('is_valid', true).not('community', 'is', null).limit(5000),
+      supabase.from(TABLE).select('type').eq('is_valid', true).not('type', 'is', null).limit(2000),
+      supabase.from(TABLE).select('source').eq('is_valid', true).limit(1000),
+      supabase.from(TABLE).select('purpose').eq('is_valid', true).not('purpose', 'is', null).limit(1000),
+    ]);
 
-    const property_names = db.prepare(
-      `SELECT DISTINCT property_name FROM listings WHERE property_name IS NOT NULL ORDER BY property_name`
-    ).all().map(r => r.property_name);
+    const unique = (arr, key) => [...new Set((arr || []).map(r => r[key]).filter(Boolean))].sort();
 
-    const types = db.prepare(
-      `SELECT DISTINCT type FROM listings WHERE type IS NOT NULL ORDER BY type`
-    ).all().map(r => r.type);
-
-    const sources = db.prepare(
-      `SELECT DISTINCT source FROM listings ORDER BY source`
-    ).all().map(r => r.source);
-
-    const purposes = db.prepare(
-      `SELECT DISTINCT purpose FROM listings WHERE purpose IS NOT NULL ORDER BY purpose`
-    ).all().map(r => r.purpose);
-
-    res.json({ communities, property_names, types, sources, purposes });
+    res.json({
+      communities: unique(commRes.data, 'community'),
+      property_names: [], // Too many to fetch — searched via search endpoints
+      types: unique(typeRes.data, 'type'),
+      sources: unique(sourceRes.data, 'source'),
+      purposes: unique(purposeRes.data, 'purpose'),
+    });
   } catch (err) {
-    console.error(err);
+    console.error('Filter options error:', err);
     res.status(500).json({ error: 'Failed to fetch filter options' });
   }
 });
 
 // ── GET /api/search-suggestions ───────────────────────────────────────────────
 
-app.get('/api/search-suggestions', (req, res) => {
+app.get('/api/search-suggestions', async (req, res) => {
   try {
     const q = req.query.q;
     if (!q || q.length < 2) return res.json({ communities: [], buildings: [] });
 
-    const communities = db.prepare(`
-      SELECT community AS label, COUNT(*) AS cnt
-      FROM listings
-      WHERE community LIKE @q AND community IS NOT NULL
-      GROUP BY community ORDER BY cnt DESC LIMIT 5
-    `).all({ q: `%${q}%` });
+    const [commRes, bldRes] = await Promise.all([
+      supabase.rpc('search_communities', { query: `%${q}%` }),
+      supabase.rpc('search_buildings', { query: `%${q}%` }),
+    ]);
 
-    const buildings = db.prepare(`
-      SELECT property_name AS label, COUNT(*) AS cnt
-      FROM listings
-      WHERE property_name LIKE @q AND property_name IS NOT NULL
-      GROUP BY property_name ORDER BY cnt DESC LIMIT 5
-    `).all({ q: `%${q}%` });
+    // Fallback if RPCs don't exist
+    let communities = commRes.data || [];
+    let buildings = bldRes.data || [];
+
+    if (commRes.error) {
+      const { data } = await supabase
+        .from(TABLE)
+        .select('community')
+        .eq('is_valid', true)
+        .ilike('community', `%${q}%`)
+        .not('community', 'is', null)
+        .limit(500);
+      const counts = {};
+      (data || []).forEach(r => { if (r.community) counts[r.community] = (counts[r.community] || 0) + 1; });
+      communities = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, cnt]) => ({ label, cnt }));
+    }
+    if (bldRes.error) {
+      const { data } = await supabase
+        .from(TABLE)
+        .select('property_name')
+        .eq('is_valid', true)
+        .ilike('property_name', `%${q}%`)
+        .not('property_name', 'is', null)
+        .limit(500);
+      const counts = {};
+      (data || []).forEach(r => { if (r.property_name) counts[r.property_name] = (counts[r.property_name] || 0) + 1; });
+      buildings = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, cnt]) => ({ label, cnt }));
+    }
 
     res.json({ communities, buildings });
   } catch (err) {
-    console.error(err);
+    console.error('Suggestions error:', err);
     res.status(500).json({ error: 'Failed to fetch suggestions' });
   }
 });
 
 // ── GET /api/search-community ─────────────────────────────────────────────────
 
-app.get('/api/search-community', (req, res) => {
+app.get('/api/search-community', async (req, res) => {
   try {
     const q = req.query.q;
     if (!q || q.length < 2) return res.json([]);
-    const rows = db.prepare(`
-      SELECT community AS label, COUNT(*) AS cnt FROM listings
-      WHERE community LIKE @q AND community IS NOT NULL
-      GROUP BY community ORDER BY cnt DESC LIMIT 10
-    `).all({ q: `%${q}%` });
-    res.json(rows);
-  } catch (err) { res.status(500).json([]); }
+
+    const { data } = await supabase
+      .from(TABLE)
+      .select('community')
+      .eq('is_valid', true)
+      .ilike('community', `%${q}%`)
+      .not('community', 'is', null)
+      .limit(1000);
+
+    const counts = {};
+    (data || []).forEach(r => { if (r.community) counts[r.community] = (counts[r.community] || 0) + 1; });
+    const results = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, cnt]) => ({ label, cnt }));
+    res.json(results);
+  } catch (err) {
+    res.status(500).json([]);
+  }
 });
 
 // ── GET /api/search-building ─────────────────────────────────────────────────
 
-app.get('/api/search-building', (req, res) => {
+app.get('/api/search-building', async (req, res) => {
   try {
     const q = req.query.q;
     if (!q || q.length < 2) return res.json([]);
-    const rows = db.prepare(`
-      SELECT property_name AS label, COUNT(*) AS cnt FROM listings
-      WHERE property_name LIKE @q AND property_name IS NOT NULL AND property_name != ''
-      GROUP BY property_name ORDER BY cnt DESC LIMIT 10
-    `).all({ q: `%${q}%` });
-    res.json(rows);
-  } catch (err) { res.status(500).json([]); }
+
+    const { data } = await supabase
+      .from(TABLE)
+      .select('property_name')
+      .eq('is_valid', true)
+      .ilike('property_name', `%${q}%`)
+      .not('property_name', 'is', null)
+      .neq('property_name', '')
+      .limit(1000);
+
+    const counts = {};
+    (data || []).forEach(r => { if (r.property_name) counts[r.property_name] = (counts[r.property_name] || 0) + 1; });
+    const results = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, cnt]) => ({ label, cnt }));
+    res.json(results);
+  } catch (err) {
+    res.status(500).json([]);
+  }
 });
 
 // ── GET /api/health ──────────────────────────────────────────────────────────
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   try {
-    const { total } = db.prepare('SELECT COUNT(*) as total FROM listings').get();
-    const dbInfo = db.prepare("SELECT file FROM pragma_database_list WHERE name='main'").get();
-    res.json({ total, db_path: dbInfo?.file || 'unknown', timestamp: new Date().toISOString(), resend_configured: !!process.env.RESEND_API_KEY, users_db: !!usersDb });
+    const { count, error } = await supabase
+      .from(TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('is_valid', true);
+
+    if (error) throw error;
+    res.json({
+      total: count || 0,
+      db: 'supabase',
+      timestamp: new Date().toISOString(),
+      resend_configured: !!process.env.RESEND_API_KEY,
+      users_db: !!usersDb,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── SSE endpoint for live DB updates ─────────────────────────────────────────
+// ── SSE endpoint (simplified — Supabase Realtime can be added later) ────────
 
 const sseClients = new Set();
 
@@ -430,27 +511,6 @@ app.get('/api/events', (req, res) => {
   req.on('close', () => sseClients.delete(res));
 });
 
-// Watch database file for changes (local dev only — Railway uses volume)
-const dbPath = process.env.DB_PATH || path.join(import.meta.dirname || __dirname, '..', '..', 'scraper', 'database.db');
-try {
-  const actualDbPath = db.prepare("SELECT file FROM pragma_database_list WHERE name='main'").get()?.file;
-  if (actualDbPath && fs.existsSync(actualDbPath)) {
-    let debounce = null;
-    fs.watch(actualDbPath, () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        console.log('Database updated at', new Date().toISOString());
-        sseClients.forEach(client => {
-          try { client.write('data: refresh\n\n'); } catch {}
-        });
-      }, 2000);
-    });
-    console.log('Watching database for changes:', actualDbPath);
-  }
-} catch (e) {
-  // File watching is optional — ignore errors
-}
-
 // ── Auth routes ──────────────────────────────────────────────────────────────
 
 registerAuthRoutes(app);
@@ -459,45 +519,40 @@ registerAuthRoutes(app);
 
 app.get('/api/saved/ids', requireAuth, (req, res) => {
   if (!usersDb) return res.json([]);
-  const rows = usersDb.prepare(`SELECT listing_id FROM saved_listings WHERE user_id = ?`).all(req.user.user_id);
+  const rows = usersDb.prepare('SELECT listing_id FROM saved_listings WHERE user_id = ?').all(req.user.user_id);
   res.json(rows.map(r => r.listing_id));
 });
 
-app.get('/api/saved', requireAuth, (req, res) => {
+app.get('/api/saved', requireAuth, async (req, res) => {
   if (!usersDb) return res.json({ listings: [], total: 0 });
   try {
-    const savedIds = usersDb.prepare(`SELECT listing_id FROM saved_listings WHERE user_id = ? ORDER BY saved_at DESC`).all(req.user.user_id);
+    const savedIds = usersDb.prepare('SELECT listing_id FROM saved_listings WHERE user_id = ? ORDER BY saved_at DESC').all(req.user.user_id);
     if (savedIds.length === 0) return res.json({ listings: [], total: 0 });
 
     const ids = savedIds.map(r => r.listing_id);
-    const placeholders = ids.map((_, i) => `@id${i}`);
-    const params = {};
-    ids.forEach((id, i) => { params[`id${i}`] = id; });
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select(LISTING_SELECT)
+      .in('id', ids);
 
-    const sql = `
-      SELECT ${dipSelectFields()}
-      FROM listings l
-      ${DIP_JOIN}
-      WHERE l.id IN (${placeholders.join(',')})
-    `;
-    const rows = db.prepare(sql).all(params);
-    const cleaned = rows.map(({ title, ...rest }) => rest);
-    res.json({ listings: cleaned, total: cleaned.length });
+    if (error) throw error;
+    const rows = (data || []).map(mapRow);
+    res.json({ listings: rows, total: rows.length });
   } catch (err) {
-    console.error(err);
+    console.error('Saved listings error:', err);
     res.status(500).json({ error: 'Failed to fetch saved listings' });
   }
 });
 
 app.post('/api/saved/:listing_id', requireAuth, (req, res) => {
   if (!usersDb) return res.status(503).json({ error: 'Auth not available' });
-  usersDb.prepare(`INSERT OR IGNORE INTO saved_listings (user_id, listing_id) VALUES (?, ?)`).run(req.user.user_id, parseInt(req.params.listing_id));
+  usersDb.prepare('INSERT OR IGNORE INTO saved_listings (user_id, listing_id) VALUES (?, ?)').run(req.user.user_id, parseInt(req.params.listing_id));
   res.json({ saved: true });
 });
 
 app.delete('/api/saved/:listing_id', requireAuth, (req, res) => {
   if (!usersDb) return res.status(503).json({ error: 'Auth not available' });
-  usersDb.prepare(`DELETE FROM saved_listings WHERE user_id = ? AND listing_id = ?`).run(req.user.user_id, parseInt(req.params.listing_id));
+  usersDb.prepare('DELETE FROM saved_listings WHERE user_id = ? AND listing_id = ?').run(req.user.user_id, parseInt(req.params.listing_id));
   res.json({ saved: false });
 });
 
@@ -511,8 +566,12 @@ app.get('*', (req, res) => {
 
 // ── start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Dip Finder running on http://0.0.0.0:${PORT}`);
-  const { total } = db.prepare('SELECT COUNT(*) as total FROM listings').get();
-  console.log(`Database: ${total} listings`);
+  try {
+    const { count } = await supabase.from(TABLE).select('id', { count: 'exact', head: true }).eq('is_valid', true);
+    console.log(`Supabase: ${count} listings`);
+  } catch (e) {
+    console.error('Supabase connection check failed:', e.message);
+  }
 });
