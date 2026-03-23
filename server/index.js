@@ -118,12 +118,12 @@ function applyFilters(query, params) {
     query = query.gte('size_sqft', parseInt(params.min_sqft, 10));
   }
 
-  const communities = toArray(params['community[]'] || params.community_arr);
+  const communities = toArray(params['community[]'] || params.community || params.community_arr);
   if (communities.length) {
     query = query.in('community', communities);
   }
 
-  const buildings = toArray(params['property_name[]'] || params.property_name_arr);
+  const buildings = toArray(params['property_name[]'] || params.property_name || params.property_name_arr);
   if (buildings.length) {
     query = query.in('property_name', buildings);
   }
