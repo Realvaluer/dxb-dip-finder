@@ -21,16 +21,11 @@ app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // The select fields we use for listings (map Supabase columns to API shape)
-const LISTING_SELECT = [
-  'id', 'reference_no', 'source', 'scraped_at', 'date_listed', 'purpose',
-  'community', 'property_name', 'type', 'bedrooms', 'bathrooms',
-  'size_sqft', 'furnished', 'price_aed', 'price_sqft', 'listing_change',
-  'broker_agency', 'url', 'lat', 'lng',
-  'dip_pct', 'dip_price', 'dip_ref_id'
-].join(',');
+const LISTING_SELECT = '*';
 
-function mapRow(row) {
+function mapRow(row, refData) {
   if (!row) return null;
+  const ref = refData || null;
   return {
     id: row.id,
     reference_no: row.reference_no,
@@ -38,6 +33,10 @@ function mapRow(row) {
     scraped_at: row.scraped_at,
     date_listed: row.date_listed,
     purpose: row.purpose,
+    title: row.title,
+    distress: row.distress,
+    ready_off_plan: row.ready_off_plan,
+    city: row.city,
     community: row.community,
     property_name: row.property_name,
     type: row.type,
@@ -55,9 +54,29 @@ function mapRow(row) {
     // Map dip columns to the change_pct / change_aed the frontend expects
     change_pct: row.dip_pct != null && row.dip_pct !== 0 ? Math.round(row.dip_pct * 10) / 10 : null,
     change_aed: row.dip_price != null && row.dip_price !== 0 ? row.dip_price : null,
-    previous_price: null, // Not stored separately in Supabase schema
-    price_changed_at: null,
+    // Previous listing data (from dip_ref_id lookup)
+    previous_price: ref ? ref.price_aed : null,
+    price_changed_at: ref ? ref.date_listed : null,
+    previous_url: ref ? ref.url : null,
   };
+}
+
+// Batch-fetch reference listings for dip_ref_id lookups
+async function fetchRefData(rows) {
+  const refIds = [...new Set(rows.filter(r => r.dip_ref_id).map(r => r.dip_ref_id))];
+  if (refIds.length === 0) return {};
+
+  // Supabase IN query supports up to ~300 ids at once
+  const refMap = {};
+  for (let i = 0; i < refIds.length; i += 200) {
+    const batch = refIds.slice(i, i + 200);
+    const { data } = await supabase
+      .from(TABLE)
+      .select('id, price_aed, url, source, date_listed, size_sqft, furnished, property_name, community')
+      .in('id', batch);
+    (data || []).forEach(r => { refMap[r.id] = r; });
+  }
+  return refMap;
 }
 
 function toArray(val) {
@@ -162,8 +181,11 @@ app.get('/api/listings', async (req, res) => {
     const { data, count, error } = await query;
     if (error) throw error;
 
+    // Batch-fetch reference listings for previous price/url
+    const refMap = await fetchRefData(data || []);
+
     res.json({
-      listings: (data || []).map(mapRow),
+      listings: (data || []).map(r => mapRow(r, refMap[r.dip_ref_id])),
       total: count || 0,
     });
   } catch (err) {
@@ -217,14 +239,16 @@ app.get('/api/listings/:id', async (req, res) => {
 
     // Get comparison listing if dip_ref_id exists
     let comparison = null;
+    let refData = null;
     if (row.dip_ref_id) {
       const { data: ref } = await supabase
         .from(TABLE)
-        .select('url, source, price_aed, date_listed, size_sqft, furnished, property_name, community')
+        .select('id, url, source, price_aed, date_listed, size_sqft, furnished, property_name, community')
         .eq('id', row.dip_ref_id)
         .single();
 
       if (ref) {
+        refData = ref;
         comparison = {
           url: ref.url,
           source: ref.source,
@@ -238,7 +262,7 @@ app.get('/api/listings/:id', async (req, res) => {
       }
     }
 
-    const mapped = mapRow(row);
+    const mapped = mapRow(row, refData);
     res.json({
       ...mapped,
       price_history: edits || [],
@@ -536,7 +560,8 @@ app.get('/api/saved', requireAuth, async (req, res) => {
       .in('id', ids);
 
     if (error) throw error;
-    const rows = (data || []).map(mapRow);
+    const refMap = await fetchRefData(data || []);
+    const rows = (data || []).map(r => mapRow(r, refMap[r.dip_ref_id]));
     res.json({ listings: rows, total: rows.length });
   } catch (err) {
     console.error('Saved listings error:', err);
