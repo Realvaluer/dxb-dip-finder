@@ -54,10 +54,13 @@ function mapRow(row, refData) {
     // Map dip columns to the change_pct / change_aed the frontend expects
     change_pct: row.dip_pct != null && row.dip_pct !== 0 ? Math.round(row.dip_pct * 10) / 10 : null,
     change_aed: row.dip_price != null && row.dip_price !== 0 ? row.dip_price : null,
-    // Previous listing data (from dip_ref_id lookup)
-    previous_price: ref ? ref.price_aed : null,
-    price_changed_at: ref ? ref.date_listed : null,
-    previous_url: ref ? ref.url : null,
+    // Previous listing data — prefer dip_prev_* columns, fallback to ref lookup
+    previous_price: row.dip_prev_price || (ref ? ref.price_aed : null),
+    price_changed_at: row.dip_prev_date || (ref ? ref.date_listed : null),
+    previous_url: row.dip_prev_url || (ref ? ref.url : null),
+    dip_prev_source: row.dip_prev_source || (ref ? ref.source : null),
+    dip_prev_size: row.dip_prev_size || (ref ? ref.size_sqft : null),
+    dip_prev_furnished: row.dip_prev_furnished || (ref ? ref.furnished : null),
   };
 }
 
@@ -237,13 +240,22 @@ app.get('/api/listings/:id', async (req, res) => {
       .eq('field_name', 'price_aed')
       .order('edited_at', { ascending: false });
 
-    // Get comparison listing if dip_ref_id exists
+    // Get comparison — prefer dip_prev_* columns, fallback to dip_ref_id JOIN
     let comparison = null;
     let refData = null;
-    if (row.dip_ref_id) {
+    if (row.dip_prev_price) {
+      comparison = {
+        url: row.dip_prev_url,
+        source: row.dip_prev_source,
+        price: row.dip_prev_price,
+        date: row.dip_prev_date,
+        size: row.dip_prev_size,
+        furnished: row.dip_prev_furnished,
+      };
+    } else if (row.dip_ref_id) {
       const { data: ref } = await supabase
         .from(TABLE)
-        .select('id, url, source, price_aed, date_listed, size_sqft, furnished, property_name, community')
+        .select('id, url, source, price_aed, date_listed, size_sqft, furnished')
         .eq('id', row.dip_ref_id)
         .single();
 
@@ -256,8 +268,6 @@ app.get('/api/listings/:id', async (req, res) => {
           date: ref.date_listed,
           size: ref.size_sqft,
           furnished: ref.furnished,
-          property_name: ref.property_name,
-          community: ref.community,
         };
       }
     }
