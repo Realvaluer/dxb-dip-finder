@@ -26,6 +26,9 @@ const LISTING_SELECT = '*';
 function mapRow(row, refData) {
   if (!row) return null;
   const ref = refData || null;
+  // listing_change is only valid if |change| < 50% of price (filters out reference collisions)
+  const validListingChange = row.listing_change != null && row.listing_change !== 0
+    && row.price_aed && Math.abs(row.listing_change) < (row.price_aed * 0.5);
   return {
     id: row.id,
     reference_no: row.reference_no,
@@ -46,7 +49,7 @@ function mapRow(row, refData) {
     furnished: row.furnished,
     price_aed: row.price_aed,
     price_sqft: row.price_sqft,
-    listing_change: row.listing_change,
+    listing_change: validListingChange ? row.listing_change : null,
     broker_agency: row.broker_agency,
     url: row.url,
     lat: row.lat,
