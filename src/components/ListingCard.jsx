@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { formatDate, formatMonthYear, formatPrice, sourceTag } from '../utils';
+import { formatDate, formatPrice, sourceTag } from '../utils';
 
 export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const navigate = useNavigate();
@@ -10,6 +10,11 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
   const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
   const hasChange = isDecrease || isIncrease;
+
+  // Same-listing price change
+  const hasSameListingChange = l.listing_change != null && l.listing_change !== 0;
+  const sameDecrease = hasSameListingChange && l.listing_change < 0;
+  const sameIncrease = hasSameListingChange && l.listing_change > 0;
 
   function handleBookmark(e) {
     e.stopPropagation();
@@ -71,17 +76,29 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
         <span className="ml-auto text-[10px] font-mono text-muted">{sourceTag(l.source)}</span>
       </div>
 
-      {/* Row 5: price change footer */}
-      {isDecrease && (
+      {/* Row 5: same-listing price change */}
+      {hasSameListingChange && (
         <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
+          <span className="font-semibold text-white">Same Listing:</span>{' '}
+          <span className={sameDecrease ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
+            {sameDecrease ? '−' : '+'}{formatPrice(Math.abs(l.listing_change))}
+          </span>
+        </div>
+      )}
+
+      {/* Row 5b: cross-listing price change */}
+      {isDecrease && (
+        <div className={`${hasSameListingChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
+          <span className="font-semibold text-white">Listing vs. Listing:</span>{' '}
           <span className="text-dip-red font-medium">−{formatPrice(absChangeAed)}</span>
-          {' '}vs prev. {formatPrice(l.previous_price)} · {formatMonthYear(l.price_changed_at)}
+          {' '}vs prev. {formatPrice(l.previous_price)} · {formatDate(l.price_changed_at)}
         </div>
       )}
       {isIncrease && (
-        <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
+        <div className={`${hasSameListingChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
+          <span className="font-semibold text-white">Listing vs. Listing:</span>{' '}
           <span className="text-accent font-medium">+{formatPrice(absChangeAed)}</span>
-          {' '}vs prev. {formatPrice(l.previous_price)} · {formatMonthYear(l.price_changed_at)}
+          {' '}vs prev. {formatPrice(l.previous_price)} · {formatDate(l.price_changed_at)}
         </div>
       )}
 
@@ -92,7 +109,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleViewLink}
-          className={`${hasChange ? '' : 'mt-2 pt-2 border-t border-border '}text-[11px] text-accent flex items-center gap-1 hover:underline ${hasChange ? 'mt-1' : ''}`}
+          className={`${hasChange || hasSameListingChange ? '' : 'mt-2 pt-2 border-t border-border '}text-[11px] text-accent flex items-center gap-1 hover:underline ${hasChange || hasSameListingChange ? 'mt-1' : ''}`}
         >
           → View on {l.source}
         </a>

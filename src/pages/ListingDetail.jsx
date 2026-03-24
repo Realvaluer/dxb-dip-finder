@@ -39,6 +39,11 @@ export default function ListingDetail() {
   const aedPerSqft = l.size_sqft ? Math.round(l.price_aed / l.size_sqft) : null;
   const barWidth = hasChange && l.previous_price ? Math.min(Math.round((l.price_aed / l.previous_price) * 100), 100) : 0;
 
+  // Same-listing price change
+  const hasSameListingChange = l.listing_change != null && l.listing_change !== 0;
+  const sameDecrease = hasSameListingChange && l.listing_change < 0;
+  const sameIncrease = hasSameListingChange && l.listing_change > 0;
+
   return (
     <div className="min-h-screen bg-bg pb-8">
       {/* Back row */}
@@ -91,11 +96,27 @@ export default function ListingDetail() {
 
         <div className="border-t border-border" />
 
-        {/* Price change panel */}
+        {/* Same-listing price change */}
+        {hasSameListingChange && (
+          <>
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Same listing change</div>
+              <div className="bg-card rounded-xl p-3 flex items-center justify-between">
+                <span className="text-sm text-muted">Price changed by</span>
+                <span className={`text-sm font-bold ${sameDecrease ? 'text-dip-red' : 'text-accent'}`}>
+                  {sameDecrease ? '−' : '+'}{formatPrice(Math.abs(l.listing_change))}
+                </span>
+              </div>
+            </div>
+            <div className="border-t border-border" />
+          </>
+        )}
+
+        {/* Cross-listing price change panel */}
         {hasChange && (
           <>
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Price change</div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Listing vs. listing</div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-card rounded-xl p-3">
                   <div className="text-[10px] text-muted">Current price</div>
