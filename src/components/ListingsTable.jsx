@@ -13,6 +13,7 @@ const COLUMNS = [
   { key: 'price_aed', label: 'Price (AED)', width: '120px', align: 'right', sort: 'price' },
   { key: 'change_pct', label: 'Change %', width: '90px', align: 'right', sort: 'dip_pct' },
   { key: 'change_aed', label: 'Change AED', width: '110px', align: 'right', sort: 'dip_aed' },
+  { key: 'listing_change', label: 'Listing Change', width: '120px', align: 'right', sort: 'listing_change' },
 ];
 
 function getSortValue(col, currentSort) {
@@ -21,6 +22,7 @@ function getSortValue(col, currentSort) {
   if (col.sort === 'price') return currentSort === 'price_asc' || currentSort === 'price_desc' ? currentSort : null;
   if (col.sort === 'dip_pct') return currentSort === 'dip_pct' ? 'dip_pct' : null;
   if (col.sort === 'dip_aed') return currentSort === 'dip_aed' ? 'dip_aed' : null;
+  if (col.sort === 'listing_change') return currentSort === 'listing_change' ? 'listing_change' : null;
   return null;
 }
 
@@ -30,7 +32,7 @@ function getSortArrow(col, currentSort) {
   if (val === 'newest') return ' ▼';
   if (val === 'price_asc') return ' ▲';
   if (val === 'price_desc') return ' ▼';
-  if (val === 'dip_pct' || val === 'dip_aed') return ' ▲';
+  if (val === 'dip_pct' || val === 'dip_aed' || val === 'listing_change') return ' ▲';
   return '';
 }
 
@@ -43,6 +45,7 @@ function nextSort(col, currentSort) {
   }
   if (col.sort === 'dip_pct') return 'dip_pct';
   if (col.sort === 'dip_aed') return 'dip_aed';
+  if (col.sort === 'listing_change') return 'listing_change';
   return currentSort;
 }
 
@@ -61,12 +64,15 @@ function formatCell(col, listing) {
     case 'change_aed':
       if (val == null) return '—';
       return `${val > 0 ? '+' : ''}AED ${Math.abs(val).toLocaleString()}`;
+    case 'listing_change':
+      if (val == null) return '—';
+      return `${val > 0 ? '+' : '-'}AED ${Math.abs(val).toLocaleString()}`;
     default: return val || '—';
   }
 }
 
 function cellColor(col, listing) {
-  if (col.key === 'change_pct' || col.key === 'change_aed') {
+  if (col.key === 'change_pct' || col.key === 'change_aed' || col.key === 'listing_change') {
     const val = listing[col.key];
     if (val == null) return '';
     if (val < 0) return 'text-dip-red';

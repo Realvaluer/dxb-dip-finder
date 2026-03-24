@@ -155,6 +155,8 @@ function applySort(query, sort) {
       return query.order('dip_pct', { ascending: true, nullsFirst: false });
     case 'dip_aed':
       return query.order('dip_price', { ascending: true, nullsFirst: false });
+    case 'listing_change':
+      return query.not('listing_change', 'is', null).order('listing_change', { ascending: true, nullsFirst: false });
     case 'price_asc':
       return query.order('price_aed', { ascending: true });
     case 'price_desc':

@@ -18,6 +18,7 @@ const SORT_OPTIONS = [
   { value: 'newest', label: '↓ Most recent' },
   { value: 'dip_pct', label: '↓ Biggest dip %' },
   { value: 'dip_aed', label: '↓ Biggest dip AED' },
+  { value: 'listing_change', label: '↓ Same listing change' },
   { value: 'price_asc', label: '↑ Price low–high' },
   { value: 'price_desc', label: '↓ Price high–low' },
 ];
