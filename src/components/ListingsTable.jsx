@@ -58,12 +58,16 @@ function formatCell(col, listing) {
     case 'bedrooms': return val == null || val === 0 ? 'Studio' : val;
     case 'size_sqft': return val ? Number(val).toLocaleString() : '—';
     case 'price_aed': return val ? `AED ${Number(val).toLocaleString()}` : '—';
-    case 'change_pct':
-      if (val == null) return '—';
-      return `${val > 0 ? '+' : ''}${val.toFixed(1)}%`;
-    case 'change_aed':
-      if (val == null) return '—';
-      return `${val > 0 ? '+' : ''}AED ${Math.abs(val).toLocaleString()}`;
+    case 'change_pct': {
+      const pct = listing.last_sale_change_pct ?? val;
+      if (pct == null) return '—';
+      return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
+    }
+    case 'change_aed': {
+      const aed = listing.last_sale_change ?? val;
+      if (aed == null) return '—';
+      return `${aed > 0 ? '+' : ''}AED ${Math.abs(aed).toLocaleString()}`;
+    }
     case 'listing_change':
       if (val == null) return '—';
       return `${val > 0 ? '+' : '-'}AED ${Math.abs(val).toLocaleString()}`;
@@ -73,7 +77,9 @@ function formatCell(col, listing) {
 
 function cellColor(col, listing) {
   if (col.key === 'change_pct' || col.key === 'change_aed' || col.key === 'listing_change') {
-    const val = listing[col.key];
+    let val = listing[col.key];
+    if (col.key === 'change_pct') val = listing.last_sale_change_pct ?? val;
+    if (col.key === 'change_aed') val = listing.last_sale_change ?? val;
     if (val == null) return '';
     if (val < 0) return 'text-dip-red';
     if (val > 0) return 'text-green-400';

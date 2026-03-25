@@ -396,10 +396,12 @@ app.post('/api/listings/sales', async (req, res) => {
     for (const row of (data || [])) {
       const sale = saleMap[row.id];
       if (sale) {
+        const change = row.price_aed - sale.sale_price;
         result[row.id] = {
           last_sale_price: sale.sale_price,
           last_sale_date: sale.sale_date,
-          last_sale_change: row.price_aed - sale.sale_price,
+          last_sale_change: change,
+          last_sale_change_pct: sale.sale_price ? Math.round((change / sale.sale_price) * 1000) / 10 : null,
           last_sale_size: sale.sale_size,
           last_sale_type: sale.sale_type,
         };

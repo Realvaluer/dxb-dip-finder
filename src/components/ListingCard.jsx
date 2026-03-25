@@ -5,11 +5,17 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const navigate = useNavigate();
   const l = listing;
 
-  const isDecrease = l.change_pct != null && l.change_pct < 0;
-  const isIncrease = l.change_pct != null && l.change_pct > 0;
-  const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
+  // Pill shows transaction % (listing vs last sale/rent), fallback to listing vs listing
+  const displayPct = l.last_sale_change_pct ?? l.change_pct;
+  const isDecrease = displayPct != null && displayPct < 0;
+  const isIncrease = displayPct != null && displayPct > 0;
+  const absChangePct = displayPct != null ? Math.abs(displayPct).toFixed(1) : null;
+
+  // Listing vs listing data (for the footer row)
+  const lvlDecrease = l.change_pct != null && l.change_pct < 0;
+  const lvlIncrease = l.change_pct != null && l.change_pct > 0;
   const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
-  const hasChange = isDecrease || isIncrease;
+  const hasChange = lvlDecrease || lvlIncrease;
 
   // Same-listing price change
   const hasSameListingChange = l.listing_change != null && l.listing_change !== 0;
@@ -96,14 +102,14 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
       )}
 
       {/* Row 5b: cross-listing price change */}
-      {isDecrease && (
+      {lvlDecrease && (
         <div className={`${hasSameListingChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
           <span className="font-semibold text-white">Listing vs. Listing:</span>{' '}
           <span className="text-dip-red font-medium">−{formatPrice(absChangeAed)}</span>
           {' '}vs prev. {formatPrice(l.previous_price)} · {formatDate(l.price_changed_at)}
         </div>
       )}
-      {isIncrease && (
+      {lvlIncrease && (
         <div className={`${hasSameListingChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
           <span className="font-semibold text-white">Listing vs. Listing:</span>{' '}
           <span className="text-accent font-medium">+{formatPrice(absChangeAed)}</span>
