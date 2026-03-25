@@ -239,26 +239,6 @@ export default function FilterSheet({ open, onClose, filters, filterOptions }) {
             </div>
           </div>
 
-          {/* Sort */}
-          <div>
-            <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">Sort by</div>
-            <div className="flex flex-wrap gap-2">
-              {[['dip_pct','Biggest dip %'],['dip_aed','Biggest dip AED'],['listing_change','Same listing change'],['newest','Most recent'],['price_asc','Price ↑'],['price_desc','Price ↓']].map(([v,l]) => (
-                <Pill key={v} label={l} selected={localFilters.sort === v} onClick={() => setLocal('sort', v)} />
-              ))}
-            </div>
-          </div>
-
-          {/* Purpose */}
-          <div>
-            <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">Purpose</div>
-            <div className="flex flex-wrap gap-2">
-              {[['','Both'],['sale','Sale'],['rent','Rent']].map(([v,l]) => (
-                <Pill key={v} label={l} selected={localFilters.purpose === v} onClick={() => setLocal('purpose', v)} />
-              ))}
-            </div>
-          </div>
-
           {/* Min dip */}
           <div>
             <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">Min dip %: {minDip}%</div>
