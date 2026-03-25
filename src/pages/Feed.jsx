@@ -55,6 +55,22 @@ export default function Feed() {
   const { data: kpiData, loading: kpiLoading } = useDebouncedFetch(kpiUrl, [queryString]);
   const { data: filterOptions } = useFetch('/api/filter-options', []);
 
+  // Non-blocking sale/rent data — fetched after listings render
+  const [saleData, setSaleData] = useState({});
+
+  useEffect(() => {
+    if (!listingsData?.listings?.length) return;
+    const ids = listingsData.listings.map(l => l.id);
+    fetch('/api/listings/sales', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    })
+      .then(r => r.json())
+      .then(d => setSaleData(prev => ({ ...prev, ...d })))
+      .catch(() => {});
+  }, [listingsData]);
+
   // Mobile: infinite scroll state
   const [allListings, setAllListings] = useState([]);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -78,6 +94,17 @@ export default function Feed() {
         setAllListings(prev => [...prev, ...newItems]);
         setHasMore(offset + newItems.length < d.total);
         setLoadingMore(false);
+        // Fetch sale data for new items
+        if (newItems.length > 0) {
+          fetch('/api/listings/sales', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: newItems.map(l => l.id) }),
+          })
+            .then(r => r.json())
+            .then(sd => setSaleData(prev => ({ ...prev, ...sd })))
+            .catch(() => {});
+        }
       })
       .catch(() => setLoadingMore(false));
   }, [queryString, allListings.length, loadingMore, hasMore, isDesktop]);
@@ -108,7 +135,7 @@ export default function Feed() {
   }, []);
 
   // Desktop computed values
-  const desktopListings = isDesktop ? (listingsData?.listings || []) : [];
+  const desktopListings = isDesktop ? (listingsData?.listings || []).map(l => ({ ...l, ...(saleData[l.id] || {}) })) : [];
   const total = listingsData?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / DESKTOP_PAGE_SIZE));
 
@@ -324,7 +351,7 @@ export default function Feed() {
           ) : (
             <div className="px-4 flex flex-col gap-3">
               {allListings.map(l => (
-                <ListingCard key={l.id} listing={l} bookmarked={isBookmarked(l.id)} onToggleBookmark={toggle} />
+                <ListingCard key={l.id} listing={{ ...l, ...(saleData[l.id] || {}) }} bookmarked={isBookmarked(l.id)} onToggleBookmark={toggle} />
               ))}
               {loadingMore && <SkeletonCards count={2} />}
               {!hasMore && allListings.length > 0 && (

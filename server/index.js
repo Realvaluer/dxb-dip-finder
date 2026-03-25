@@ -18,6 +18,37 @@ app.use(compression());
 app.use(express.json());
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 
+// ── caching layer ─────────────────────────────────────────────────────────────
+
+// Sale/rent combo cache: key → { data, ts }
+const saleCache = new Map();
+const SALE_CACHE_TTL = 30 * 60 * 1000; // 30 min
+
+function getCachedSale(key) {
+  const entry = saleCache.get(key);
+  if (entry && Date.now() - entry.ts < SALE_CACHE_TTL) return entry.data;
+  saleCache.delete(key);
+  return undefined;
+}
+function setCachedSale(key, data) {
+  saleCache.set(key, { data, ts: Date.now() });
+}
+
+// KPI cache: filterKey → { data, ts }
+const kpiCache = new Map();
+const KPI_CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+// Filter-options cache (single entry, rarely changes)
+let filterOptionsCache = { data: null, ts: 0 };
+const FILTER_OPTIONS_TTL = 30 * 60 * 1000; // 30 min
+
+// Cleanup stale cache entries every 5 min
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of saleCache) if (now - v.ts > SALE_CACHE_TTL) saleCache.delete(k);
+  for (const [k, v] of kpiCache) if (now - v.ts > KPI_CACHE_TTL) kpiCache.delete(k);
+}, 5 * 60 * 1000);
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // The select fields we use for listings (map Supabase columns to API shape)
@@ -132,13 +163,18 @@ async function fetchLastSales(rows) {
     });
   }
 
-  // Helper: process combos in parallel batches
-  async function processCombos(entries, queryFn) {
-    for (let i = 0; i < entries.length; i += 10) {
-      const batch = entries.slice(i, i + 10);
+  // Helper: process combos in parallel batches (25 concurrent, with caching)
+  async function processCombos(entries, queryFn, cachePrefix) {
+    for (let i = 0; i < entries.length; i += 25) {
+      const batch = entries.slice(i, i + 25);
       await Promise.all(batch.map(async (combo) => {
         try {
-          const data = await queryFn(combo);
+          const cacheKey = `${cachePrefix}|${combo.property_name.toLowerCase()}|${combo.community.toLowerCase()}|${combo.bedrooms}`;
+          let data = getCachedSale(cacheKey);
+          if (data === undefined) {
+            data = await queryFn(combo);
+            setCachedSale(cacheKey, data || []);
+          }
           if (!data || data.length === 0) return;
           for (const listing of combo.listings) {
             const match = matchBySize(listing, data);
@@ -158,41 +194,42 @@ async function fetchLastSales(rows) {
     }
   }
 
-  // ── SALE listings → rv_sales ──
+  // ── Process SALE and RENT combos in parallel ──
   const saleCombos = groupCombos(saleRows);
-  await processCombos(saleCombos, async (combo) => {
-    const bed = parseInt(combo.bedrooms, 10);
-    const { data } = await salesDb
-      .from('rv_sales')
-      .select('id, price, price_sqft, size_sqft, date, bedrooms, subtype')
-      .eq('is_valid', true)
-      .or('subtype.eq.Sale,subtype.eq.Pre-registration')
-      .ilike('property_name', combo.property_name)
-      .ilike('community_name', combo.community)
-      .eq('bedrooms', bed)
-      .gte('date', '2025-01-01')
-      .order('date', { ascending: false })
-      .limit(3);
-    return (data || []).map(r => ({ ...r, _type: r.subtype }));
-  });
-
-  // ── RENT listings → rv_rentals (RERA rental contracts) ──
   const rentCombos = groupCombos(rentRows);
-  await processCombos(rentCombos, async (combo) => {
-    const bed = parseInt(combo.bedrooms, 10);
-    const { data } = await salesDb
-      .from('rv_rentals')
-      .select('id, price, price_sqft, size_sqft, date, bedrooms')
-      .eq('is_valid', true)
-      .eq('property_category', 'Residential')
-      .ilike('property_name', combo.property_name)
-      .ilike('community_name', combo.community)
-      .eq('bedrooms', bed)
-      .gte('date', '2025-01-01')
-      .order('date', { ascending: false })
-      .limit(3);
-    return (data || []).map(r => ({ ...r, _type: 'Rent listing' }));
-  });
+
+  await Promise.all([
+    processCombos(saleCombos, async (combo) => {
+      const bed = parseInt(combo.bedrooms, 10);
+      const { data } = await salesDb
+        .from('rv_sales')
+        .select('id, price, price_sqft, size_sqft, date, bedrooms, subtype')
+        .eq('is_valid', true)
+        .or('subtype.eq.Sale,subtype.eq.Pre-registration')
+        .ilike('property_name', combo.property_name)
+        .ilike('community_name', combo.community)
+        .eq('bedrooms', bed)
+        .gte('date', '2025-01-01')
+        .order('date', { ascending: false })
+        .limit(3);
+      return (data || []).map(r => ({ ...r, _type: r.subtype }));
+    }, 'sale'),
+    processCombos(rentCombos, async (combo) => {
+      const bed = parseInt(combo.bedrooms, 10);
+      const { data } = await salesDb
+        .from('rv_rentals')
+        .select('id, price, price_sqft, size_sqft, date, bedrooms')
+        .eq('is_valid', true)
+        .eq('property_category', 'Residential')
+        .ilike('property_name', combo.property_name)
+        .ilike('community_name', combo.community)
+        .eq('bedrooms', bed)
+        .gte('date', '2025-01-01')
+        .order('date', { ascending: false })
+        .limit(3);
+      return (data || []).map(r => ({ ...r, _type: 'Rent listing' }));
+    }, 'rent'),
+  ]);
 
   return resultMap;
 }
@@ -301,19 +338,55 @@ app.get('/api/listings', async (req, res) => {
     const { data, count, error } = await query;
     if (error) throw error;
 
-    // Batch-fetch reference listings and last sales in parallel
-    const [refMap, saleMap] = await Promise.all([
-      fetchRefData(data || []),
-      fetchLastSales(data || []),
-    ]);
+    // Fetch ref data (fast — same DB), return listings immediately without waiting for sales
+    const refMap = await fetchRefData(data || []);
 
     res.json({
-      listings: (data || []).map(r => mapRow(r, refMap[r.dip_ref_id], saleMap[r.id])),
+      listings: (data || []).map(r => mapRow(r, refMap[r.dip_ref_id], null)),
       total: count || 0,
     });
   } catch (err) {
     console.error('Listings error:', err);
     res.status(500).json({ error: 'Failed to fetch listings' });
+  }
+});
+
+// ── POST /api/listings/sales — non-blocking sale/rent lookup ────────────────
+
+app.post('/api/listings/sales', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.json({});
+
+    // Fetch the listings by ID to get property details for matching
+    const idList = ids.slice(0, 200).map(Number).filter(n => !isNaN(n));
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('id, property_name, community, bedrooms, size_sqft, purpose, price_aed')
+      .in('id', idList);
+
+    if (error) throw error;
+
+    const saleMap = await fetchLastSales(data || []);
+
+    // Return { id: { last_sale_price, last_sale_date, last_sale_change, ... } }
+    const result = {};
+    for (const row of (data || [])) {
+      const sale = saleMap[row.id];
+      if (sale) {
+        result[row.id] = {
+          last_sale_price: sale.sale_price,
+          last_sale_date: sale.sale_date,
+          last_sale_change: row.price_aed - sale.sale_price,
+          last_sale_size: sale.sale_size,
+          last_sale_type: sale.sale_type,
+        };
+      }
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Sales lookup error:', err);
+    res.json({});
   }
 });
 
@@ -410,6 +483,13 @@ app.get('/api/listings/:id', async (req, res) => {
 
 app.get('/api/kpis', async (req, res) => {
   try {
+    // Check KPI cache
+    const cacheKey = `kpi:${new URLSearchParams(req.query).toString()}`;
+    const cached = kpiCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < KPI_CACHE_TTL) {
+      return res.json(cached.data);
+    }
+
     // Get latest date in DB as "today"
     const { data: latestRow } = await supabase
       .from(TABLE)
@@ -420,90 +500,74 @@ app.get('/api/kpis', async (req, res) => {
       .single();
     const latestDate = latestRow?.date_listed;
 
-    // 1. Highest % drop TODAY
-    let pctQuery = supabase
-      .from(TABLE)
-      .select('id, dip_pct, property_name, community')
-      .eq('is_valid', true)
-      .eq('date_listed', latestDate || '')
-      .not('dip_pct', 'is', null)
-      .lt('dip_pct', 0)
-      .order('dip_pct', { ascending: true })
-      .limit(1);
-    pctQuery = applyFilters(pctQuery, req.query);
-    const { data: pctData } = await pctQuery;
+    // Run all 4 KPI queries in parallel
+    const [pctResult, aedResult, commResult, dipsResult] = await Promise.all([
+      // 1. Highest % drop TODAY
+      (() => {
+        let q = supabase.from(TABLE).select('id, dip_pct, property_name, community')
+          .eq('is_valid', true).eq('date_listed', latestDate || '')
+          .not('dip_pct', 'is', null).lt('dip_pct', 0)
+          .order('dip_pct', { ascending: true }).limit(1);
+        q = applyFilters(q, req.query);
+        return q;
+      })(),
+      // 2. Highest AED drop TODAY
+      (() => {
+        let q = supabase.from(TABLE).select('id, dip_price, property_name, community')
+          .eq('is_valid', true).eq('date_listed', latestDate || '')
+          .not('dip_price', 'is', null).lt('dip_price', 0)
+          .order('dip_price', { ascending: true }).limit(1);
+        q = applyFilters(q, req.query);
+        return q;
+      })(),
+      // 3. Community with most drops — single query (limit 10000)
+      supabase.from(TABLE).select('community')
+        .eq('is_valid', true).not('dip_pct', 'is', null).lt('dip_pct', 0)
+        .limit(10000),
+      // 4. Dips in last 24h
+      (() => {
+        let q = supabase.from(TABLE).select('id', { count: 'exact', head: true })
+          .eq('is_valid', true).eq('date_listed', latestDate || '')
+          .not('dip_pct', 'is', null).lt('dip_pct', 0);
+        q = applyFilters(q, req.query);
+        return q;
+      })(),
+    ]);
 
-    // 2. Highest AED drop TODAY
-    let aedQuery = supabase
-      .from(TABLE)
-      .select('id, dip_price, property_name, community')
-      .eq('is_valid', true)
-      .eq('date_listed', latestDate || '')
-      .not('dip_price', 'is', null)
-      .lt('dip_price', 0)
-      .order('dip_price', { ascending: true })
-      .limit(1);
-    aedQuery = applyFilters(aedQuery, req.query);
-    const { data: aedData } = await aedQuery;
-
-    // 3. Community with most drops (negative dip_pct only)
+    // Process community counts
     let mostDrops = null;
-    {
-      let allComm = [];
-      let from = 0;
-      const batchSize = 1000;
-      for (let i = 0; i < 10; i++) {
-        const { data: batch } = await supabase
-          .from(TABLE)
-          .select('community')
-          .eq('is_valid', true)
-          .not('dip_pct', 'is', null)
-          .lt('dip_pct', 0)
-          .range(from, from + batchSize - 1);
-        if (!batch || batch.length === 0) break;
-        allComm = allComm.concat(batch);
-        if (batch.length < batchSize) break;
-        from += batchSize;
-      }
-      if (allComm.length) {
-        const counts = {};
-        allComm.forEach(r => { if (r.community) counts[r.community] = (counts[r.community] || 0) + 1; });
-        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-        if (top) mostDrops = { community: top[0], count: top[1] };
-      }
+    if (commResult.data?.length) {
+      const counts = {};
+      commResult.data.forEach(r => { if (r.community) counts[r.community] = (counts[r.community] || 0) + 1; });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      if (top) mostDrops = { community: top[0], count: top[1] };
     }
 
-    // 4. Dips in last 24h (listings with negative dip_pct on latest date)
-    let dipsQuery = supabase
-      .from(TABLE)
-      .select('id', { count: 'exact', head: true })
-      .eq('is_valid', true)
-      .eq('date_listed', latestDate || '')
-      .not('dip_pct', 'is', null)
-      .lt('dip_pct', 0);
-    dipsQuery = applyFilters(dipsQuery, req.query);
-    const { count: dipsToday } = await dipsQuery;
-
-    const highestPct = pctData?.[0] ? {
-      listing_id: pctData[0].id,
-      change_pct: Math.round(pctData[0].dip_pct * 10) / 10,
-      property_name: pctData[0].property_name,
-      community: pctData[0].community,
+    const highestPct = pctResult.data?.[0] ? {
+      listing_id: pctResult.data[0].id,
+      change_pct: Math.round(pctResult.data[0].dip_pct * 10) / 10,
+      property_name: pctResult.data[0].property_name,
+      community: pctResult.data[0].community,
     } : null;
 
-    const highestAed = aedData?.[0] ? {
-      listing_id: aedData[0].id,
-      change_aed: aedData[0].dip_price,
-      property_name: aedData[0].property_name,
-      community: aedData[0].community,
+    const highestAed = aedResult.data?.[0] ? {
+      listing_id: aedResult.data[0].id,
+      change_aed: aedResult.data[0].dip_price,
+      property_name: aedResult.data[0].property_name,
+      community: aedResult.data[0].community,
     } : null;
 
-    res.json({
+    const result = {
       highest_dip_pct: highestPct,
       highest_dip_aed: highestAed,
       most_drops_community: mostDrops,
-      dips_today: dipsToday || 0,
-    });
+      dips_today: dipsResult.count || 0,
+    };
+
+    // Cache result
+    kpiCache.set(cacheKey, { data: result, ts: Date.now() });
+
+    res.json(result);
   } catch (err) {
     console.error('KPIs error:', err);
     res.status(500).json({ error: 'Failed to fetch KPIs' });
@@ -514,6 +578,11 @@ app.get('/api/kpis', async (req, res) => {
 
 app.get('/api/filter-options', async (req, res) => {
   try {
+    // Check cache
+    if (filterOptionsCache.data && Date.now() - filterOptionsCache.ts < FILTER_OPTIONS_TTL) {
+      return res.json(filterOptionsCache.data);
+    }
+
     // Supabase doesn't have DISTINCT — fetch unique values
     const [commRes, typeRes, sourceRes, purposeRes] = await Promise.all([
       supabase.from(TABLE).select('community').eq('is_valid', true).not('community', 'is', null).limit(5000),
@@ -524,13 +593,18 @@ app.get('/api/filter-options', async (req, res) => {
 
     const unique = (arr, key) => [...new Set((arr || []).map(r => r[key]).filter(Boolean))].sort();
 
-    res.json({
+    const result = {
       communities: unique(commRes.data, 'community'),
       property_names: [], // Too many to fetch — searched via search endpoints
       types: unique(typeRes.data, 'type'),
       sources: unique(sourceRes.data, 'source'),
       purposes: unique(purposeRes.data, 'purpose'),
-    });
+    };
+
+    // Cache result
+    filterOptionsCache = { data: result, ts: Date.now() };
+
+    res.json(result);
   } catch (err) {
     console.error('Filter options error:', err);
     res.status(500).json({ error: 'Failed to fetch filter options' });
