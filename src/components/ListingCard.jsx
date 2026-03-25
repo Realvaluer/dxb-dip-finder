@@ -83,6 +83,9 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
           <span className={sameDecrease ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
             {sameDecrease ? '−' : '+'}{formatPrice(Math.abs(l.listing_change))}
           </span>
+          {l.listing_change_prev_price != null && (
+            <> vs prev. {formatPrice(l.listing_change_prev_price)}</>
+          )}
         </div>
       )}
 

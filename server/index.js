@@ -50,6 +50,7 @@ function mapRow(row, refData) {
     price_aed: row.price_aed,
     price_sqft: row.price_sqft,
     listing_change: validListingChange ? row.listing_change : null,
+    listing_change_prev_price: validListingChange ? row.price_aed - row.listing_change : null,
     broker_agency: row.broker_agency,
     url: row.url,
     lat: row.lat,

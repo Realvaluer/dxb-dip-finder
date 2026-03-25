@@ -101,11 +101,21 @@ export default function ListingDetail() {
           <>
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Same listing change</div>
-              <div className="bg-card rounded-xl p-3 flex items-center justify-between">
-                <span className="text-sm text-muted">Price changed by</span>
-                <span className={`text-sm font-bold ${sameDecrease ? 'text-dip-red' : 'text-accent'}`}>
-                  {sameDecrease ? '−' : '+'}{formatPrice(Math.abs(l.listing_change))}
-                </span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-card rounded-xl p-3">
+                  <div className="text-[10px] text-muted">Current price</div>
+                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.price_aed)}</div>
+                </div>
+                <div className="bg-card rounded-xl p-3">
+                  <div className="text-[10px] text-muted">Previous price</div>
+                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.listing_change_prev_price)}</div>
+                </div>
+                <div className="bg-card rounded-xl p-3">
+                  <div className="text-[10px] text-muted">{sameDecrease ? 'Decreased by' : 'Increased by'}</div>
+                  <div className={`text-sm font-bold mt-0.5 ${sameDecrease ? 'text-dip-red' : 'text-accent'}`}>
+                    {sameDecrease ? '−' : '+'}{formatPrice(Math.abs(l.listing_change))}
+                  </div>
+                </div>
               </div>
             </div>
             <div className="border-t border-border" />
