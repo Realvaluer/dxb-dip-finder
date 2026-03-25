@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { supabase, usersDb } from './db.js';
+import { supabase, salesDb, usersDb } from './db.js';
 import { registerAuthRoutes, requireAuth } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,12 +23,15 @@ app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 // The select fields we use for listings (map Supabase columns to API shape)
 const LISTING_SELECT = '*';
 
-function mapRow(row, refData) {
+function mapRow(row, refData, saleData) {
   if (!row) return null;
   const ref = refData || null;
+  const sale = saleData || null;
   // listing_change is only valid if |change| < 50% of price (filters out reference collisions)
   const validListingChange = row.listing_change != null && row.listing_change !== 0
     && row.price_aed && Math.abs(row.listing_change) < (row.price_aed * 0.5);
+  // Listing vs Last Sale: difference between listing price and last DLD sale price
+  const saleChange = sale ? row.price_aed - sale.sale_price : null;
   return {
     id: row.id,
     reference_no: row.reference_no,
@@ -65,6 +68,12 @@ function mapRow(row, refData) {
     dip_prev_source: row.dip_prev_source || (ref ? ref.source : null),
     dip_prev_size: row.dip_prev_size || (ref ? ref.size_sqft : null),
     dip_prev_furnished: row.dip_prev_furnished || (ref ? ref.furnished : null),
+    // Listing vs Last Sale
+    last_sale_price: sale ? sale.sale_price : null,
+    last_sale_date: sale ? sale.sale_date : null,
+    last_sale_change: saleChange,
+    last_sale_size: sale ? sale.sale_size : null,
+    last_sale_type: sale ? sale.sale_type : null,
   };
 }
 
@@ -84,6 +93,73 @@ async function fetchRefData(rows) {
     (data || []).forEach(r => { refMap[r.id] = r; });
   }
   return refMap;
+}
+
+// Batch-fetch last sale for each listing from RealValuer sales DB
+// Match: same property_name, same community, same bedrooms, ±10% size
+async function fetchLastSales(rows) {
+  if (!salesDb) return {};
+  const saleMap = {};
+
+  // Group unique property/community/bedrooms combos to minimize queries
+  const combos = new Map();
+  for (const row of rows) {
+    if (!row.property_name || !row.community || row.bedrooms == null) continue;
+    const key = `${row.property_name.toLowerCase()}|${row.community.toLowerCase()}|${row.bedrooms}`;
+    if (!combos.has(key)) {
+      combos.set(key, { property_name: row.property_name, community: row.community, bedrooms: row.bedrooms, listings: [] });
+    }
+    combos.get(key).listings.push(row);
+  }
+
+  // Query sales for each combo (parallel, max 10 concurrent)
+  const entries = [...combos.values()];
+  for (let i = 0; i < entries.length; i += 10) {
+    const batch = entries.slice(i, i + 10);
+    await Promise.all(batch.map(async (combo) => {
+      try {
+        const bed = parseInt(combo.bedrooms, 10);
+        const { data } = await salesDb
+          .from('rv_sales')
+          .select('id, price, price_sqft, size_sqft, date, property_name, community_name, bedrooms, transaction_type_name')
+          .eq('is_valid', true)
+          .or('transaction_type_name.eq.sales - ready,transaction_type_name.eq.sales - off-plan')
+          .ilike('property_name', combo.property_name)
+          .ilike('community_name', combo.community)
+          .eq('bedrooms', bed)
+          .order('date', { ascending: false })
+          .limit(5);
+
+        if (!data || data.length === 0) return;
+
+        // For each listing in this combo, find best matching sale (±10% size)
+        for (const listing of combo.listings) {
+          const listingSize = listing.size_sqft || 0;
+          const minSize = listingSize * 0.9;
+          const maxSize = listingSize * 1.1;
+
+          const match = data.find(s => {
+            if (!listingSize || !s.size_sqft) return true; // skip size check if missing
+            return s.size_sqft >= minSize && s.size_sqft <= maxSize;
+          });
+
+          if (match) {
+            saleMap[listing.id] = {
+              sale_price: match.price,
+              sale_price_sqft: match.price_sqft,
+              sale_date: match.date,
+              sale_size: match.size_sqft,
+              sale_bedrooms: match.bedrooms,
+              sale_type: match.transaction_type_name,
+            };
+          }
+        }
+      } catch (err) {
+        // Silently skip failed lookups
+      }
+    }));
+  }
+  return saleMap;
 }
 
 function toArray(val) {
@@ -190,11 +266,14 @@ app.get('/api/listings', async (req, res) => {
     const { data, count, error } = await query;
     if (error) throw error;
 
-    // Batch-fetch reference listings for previous price/url
-    const refMap = await fetchRefData(data || []);
+    // Batch-fetch reference listings and last sales in parallel
+    const [refMap, saleMap] = await Promise.all([
+      fetchRefData(data || []),
+      fetchLastSales(data || []),
+    ]);
 
     res.json({
-      listings: (data || []).map(r => mapRow(r, refMap[r.dip_ref_id])),
+      listings: (data || []).map(r => mapRow(r, refMap[r.dip_ref_id], saleMap[r.id])),
       total: count || 0,
     });
   } catch (err) {
@@ -278,7 +357,9 @@ app.get('/api/listings/:id', async (req, res) => {
       }
     }
 
-    const mapped = mapRow(row, refData);
+    // Fetch last sale for this listing
+    const saleMap = await fetchLastSales([row]);
+    const mapped = mapRow(row, refData, saleMap[row.id]);
     res.json({
       ...mapped,
       price_history: edits || [],
@@ -580,8 +661,11 @@ app.get('/api/saved', requireAuth, async (req, res) => {
       .in('id', ids);
 
     if (error) throw error;
-    const refMap = await fetchRefData(data || []);
-    const rows = (data || []).map(r => mapRow(r, refMap[r.dip_ref_id]));
+    const [refMap, saleMap] = await Promise.all([
+      fetchRefData(data || []),
+      fetchLastSales(data || []),
+    ]);
+    const rows = (data || []).map(r => mapRow(r, refMap[r.dip_ref_id], saleMap[r.id]));
     res.json({ listings: rows, total: rows.length });
   } catch (err) {
     console.error('Saved listings error:', err);

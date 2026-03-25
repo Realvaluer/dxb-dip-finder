@@ -44,6 +44,12 @@ export default function ListingDetail() {
   const sameDecrease = hasSameListingChange && l.listing_change < 0;
   const sameIncrease = hasSameListingChange && l.listing_change > 0;
 
+  // Listing vs Last Sale
+  const hasLastSale = l.last_sale_price != null;
+  const saleChange = l.last_sale_change;
+  const saleDecrease = hasLastSale && saleChange != null && saleChange < 0;
+  const saleIncrease = hasLastSale && saleChange != null && saleChange > 0;
+
   return (
     <div className="min-h-screen bg-bg pb-8">
       {/* Back row */}
@@ -217,6 +223,41 @@ export default function ListingDetail() {
                   );
                 })}
               </div>
+            </div>
+            <div className="border-t border-border" />
+          </>
+        )}
+
+        {/* Listing vs Last Sale */}
+        {hasLastSale && (
+          <>
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Listing vs. Last Sale</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-card rounded-xl p-3">
+                  <div className="text-[10px] text-muted">Listing price</div>
+                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.price_aed)}</div>
+                </div>
+                <div className="bg-card rounded-xl p-3">
+                  <div className="text-[10px] text-muted">Last DLD sale</div>
+                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.last_sale_price)}</div>
+                </div>
+                <div className="bg-card rounded-xl p-3">
+                  <div className="text-[10px] text-muted">{saleDecrease ? 'Below sale by' : 'Above sale by'}</div>
+                  <div className={`text-sm font-bold mt-0.5 ${saleDecrease ? 'text-dip-red' : 'text-accent'}`}>
+                    {saleDecrease ? '−' : '+'}{formatPrice(Math.abs(saleChange))}
+                  </div>
+                </div>
+                <div className="bg-card rounded-xl p-3">
+                  <div className="text-[10px] text-muted">Sale date</div>
+                  <div className="text-sm font-bold mt-0.5">{formatDate(l.last_sale_date)}</div>
+                </div>
+              </div>
+              {l.last_sale_type && (
+                <div className="mt-2 text-[11px] text-muted">
+                  Transaction: {l.last_sale_type} {l.last_sale_size ? `· ${l.last_sale_size.toLocaleString()} sqft` : ''}
+                </div>
+              )}
             </div>
             <div className="border-t border-border" />
           </>

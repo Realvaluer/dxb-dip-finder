@@ -16,6 +16,12 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const sameDecrease = hasSameListingChange && l.listing_change < 0;
   const sameIncrease = hasSameListingChange && l.listing_change > 0;
 
+  // Listing vs Last Sale
+  const hasLastSale = l.last_sale_price != null;
+  const saleChange = l.last_sale_change;
+  const saleDecrease = hasLastSale && saleChange != null && saleChange < 0;
+  const saleIncrease = hasLastSale && saleChange != null && saleChange > 0;
+
   function handleBookmark(e) {
     e.stopPropagation();
     onToggleBookmark?.(l.id);
@@ -105,6 +111,21 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
         </div>
       )}
 
+      {/* Row 5c: Listing vs Last Sale */}
+      {hasLastSale && (
+        <div className={`${hasSameListingChange || hasChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
+          <span className="font-semibold text-white">Listing vs. Last Sale:</span>{' '}
+          {saleDecrease ? (
+            <span className="text-dip-red font-medium">−{formatPrice(Math.abs(saleChange))}</span>
+          ) : saleIncrease ? (
+            <span className="text-accent font-medium">+{formatPrice(saleChange)}</span>
+          ) : (
+            <span className="font-medium">No change</span>
+          )}
+          {' '}vs sale {formatPrice(l.last_sale_price)} · {formatDate(l.last_sale_date)}
+        </div>
+      )}
+
       {/* Row 6: view on source link */}
       {l.url && (
         <a
@@ -112,7 +133,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleViewLink}
-          className={`${hasChange || hasSameListingChange ? '' : 'mt-2 pt-2 border-t border-border '}text-[11px] text-accent flex items-center gap-1 hover:underline ${hasChange || hasSameListingChange ? 'mt-1' : ''}`}
+          className={`${hasChange || hasSameListingChange || hasLastSale ? '' : 'mt-2 pt-2 border-t border-border '}text-[11px] text-accent flex items-center gap-1 hover:underline ${hasChange || hasSameListingChange || hasLastSale ? 'mt-1' : ''}`}
         >
           → View on {l.source}
         </a>

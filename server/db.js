@@ -22,6 +22,19 @@ if (!SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ── Sales DB (RealValuer transaction data) ───────────────────────────────────────
+
+const SALES_SUPABASE_URL = process.env.SALES_SUPABASE_URL || 'https://jbqxxaxesaqymqgtmkvu.supabase.co';
+const SALES_SUPABASE_KEY = process.env.SALES_SUPABASE_KEY || '';
+
+let salesDb = null;
+if (SALES_SUPABASE_KEY) {
+  salesDb = createClient(SALES_SUPABASE_URL, SALES_SUPABASE_KEY);
+  console.log('Sales DB (RealValuer) connected');
+} else {
+  console.log('WARNING: No SALES_SUPABASE_KEY set — "Listing vs Last Sale" disabled');
+}
+
 // ── Users DB (auth, saved listings) — still SQLite ─────────────────────────────
 
 let usersDb = null;
@@ -83,4 +96,4 @@ if (!Database) {
   usersDb = null;
 }
 
-export { supabase as default, supabase, usersDb };
+export { supabase as default, supabase, salesDb, usersDb };
