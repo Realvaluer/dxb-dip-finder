@@ -95,15 +95,19 @@ async function fetchRefData(rows) {
   return refMap;
 }
 
-// Batch-fetch last sale for each listing from RealValuer sales DB
+// Batch-fetch last sale for each SALE listing from RealValuer sales DB
 // Match: same property_name, same community, same bedrooms, ±10% size
+// Only looks at Sale and Pre-registration transactions after 1 Jan 2025
 async function fetchLastSales(rows) {
   if (!salesDb) return {};
   const saleMap = {};
 
+  // Only match for SALE listings, not rent
+  const saleRows = rows.filter(r => r.purpose && r.purpose.toLowerCase() === 'sale');
+
   // Group unique property/community/bedrooms combos to minimize queries
   const combos = new Map();
-  for (const row of rows) {
+  for (const row of saleRows) {
     if (!row.property_name || !row.community || row.bedrooms == null) continue;
     const key = `${row.property_name.toLowerCase()}|${row.community.toLowerCase()}|${row.bedrooms}`;
     if (!combos.has(key)) {
@@ -121,14 +125,15 @@ async function fetchLastSales(rows) {
         const bed = parseInt(combo.bedrooms, 10);
         const { data } = await salesDb
           .from('rv_sales')
-          .select('id, price, price_sqft, size_sqft, date, property_name, community_name, bedrooms, transaction_type_name')
+          .select('id, price, price_sqft, size_sqft, date, property_name, community_name, bedrooms, subtype')
           .eq('is_valid', true)
-          .or('transaction_type_name.eq.sales - ready,transaction_type_name.eq.sales - off-plan')
+          .or('subtype.eq.Sale,subtype.eq.Pre-registration')
           .ilike('property_name', combo.property_name)
           .ilike('community_name', combo.community)
           .eq('bedrooms', bed)
+          .gte('date', '2025-01-01')
           .order('date', { ascending: false })
-          .limit(5);
+          .limit(3);
 
         if (!data || data.length === 0) return;
 
