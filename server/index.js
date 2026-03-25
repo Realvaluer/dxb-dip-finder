@@ -97,7 +97,7 @@ async function fetchRefData(rows) {
 
 // Batch-fetch last comparable transaction for each listing from RealValuer DB
 // SALE listings → rv_sales (Sale/Pre-registration after 1 Jan 2025)
-// RENT listings → rv_listings (Rent after 1 Jan 2025)
+// RENT listings → rv_rentals (RERA rental contracts after 1 Jan 2025)
 // Match: same property_name, same community, same bedrooms, ±10% size
 async function fetchLastSales(rows) {
   if (!salesDb) return {};
@@ -176,18 +176,18 @@ async function fetchLastSales(rows) {
     return (data || []).map(r => ({ ...r, _type: r.subtype }));
   });
 
-  // ── RENT listings → rv_listings ──
+  // ── RENT listings → rv_rentals (RERA rental contracts) ──
   const rentCombos = groupCombos(rentRows);
   await processCombos(rentCombos, async (combo) => {
     const bed = parseInt(combo.bedrooms, 10);
     const { data } = await salesDb
-      .from('rv_listings')
+      .from('rv_rentals')
       .select('id, price, price_sqft, size_sqft, date, bedrooms')
       .eq('is_valid', true)
-      .ilike('listing_type', 'Rent')
+      .eq('property_category', 'Residential')
       .ilike('property_name', combo.property_name)
       .ilike('community_name', combo.community)
-      .eq('bedrooms', String(bed))
+      .eq('bedrooms', bed)
       .gte('date', '2025-01-01')
       .order('date', { ascending: false })
       .limit(3);
