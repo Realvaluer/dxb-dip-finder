@@ -152,15 +152,26 @@ async function fetchLastSales(rows) {
     return [...combos.values()];
   }
 
-  // Helper: match listing to best result by ±10% size
+  // Helper: match listing to best result by ±20% size (relaxed from ±10%)
   function matchBySize(listing, candidates) {
     const listingSize = listing.size_sqft || 0;
-    const minSize = listingSize * 0.9;
-    const maxSize = listingSize * 1.1;
-    return candidates.find(s => {
+    const minSize = listingSize * 0.8;
+    const maxSize = listingSize * 1.2;
+    // First try ±20% match
+    const sizeMatch = candidates.find(s => {
       if (!listingSize || !s.size_sqft) return true;
       return s.size_sqft >= minSize && s.size_sqft <= maxSize;
     });
+    if (sizeMatch) return sizeMatch;
+    // Fallback: pick closest size if within ±40%
+    if (!listingSize) return candidates[0];
+    let best = null, bestDiff = Infinity;
+    for (const s of candidates) {
+      if (!s.size_sqft) continue;
+      const diff = Math.abs(s.size_sqft - listingSize) / listingSize;
+      if (diff < 0.4 && diff < bestDiff) { best = s; bestDiff = diff; }
+    }
+    return best;
   }
 
   // Helper: process combos in parallel batches (25 concurrent, with caching)
@@ -198,35 +209,46 @@ async function fetchLastSales(rows) {
   const saleCombos = groupCombos(saleRows);
   const rentCombos = groupCombos(rentRows);
 
+  // Normalize name for fuzzy matching: "DT1" → "%dt1%", "Marina Gate 1" → "%marina gate 1%"
+  function fuzzyName(name) {
+    let n = name.toLowerCase().replace(/^the\s+/i, '').trim();
+    // Insert % at letter↔digit boundaries: "dt1" → "dt%1", "a2" → "a%2"
+    n = n.replace(/([a-z])(\d)/g, '$1%$2');
+    n = n.replace(/(\d)([a-z])/g, '$1%$2');
+    return `%${n}%`;
+  }
+
   await Promise.all([
     processCombos(saleCombos, async (combo) => {
       const bed = parseInt(combo.bedrooms, 10);
+      const namePattern = fuzzyName(combo.property_name);
       const { data } = await salesDb
         .from('rv_sales')
         .select('id, price, price_sqft, size_sqft, date, bedrooms, subtype')
         .eq('is_valid', true)
         .or('subtype.eq.Sale,subtype.eq.Pre-registration')
-        .ilike('property_name', combo.property_name)
-        .ilike('community_name', combo.community)
+        .ilike('property_name', namePattern)
+        .ilike('community_name', `%${combo.community.toLowerCase()}%`)
         .eq('bedrooms', bed)
         .gte('date', '2025-01-01')
         .order('date', { ascending: false })
-        .limit(3);
+        .limit(10);
       return (data || []).map(r => ({ ...r, _type: r.subtype }));
     }, 'sale'),
     processCombos(rentCombos, async (combo) => {
       const bed = parseInt(combo.bedrooms, 10);
+      const namePattern = fuzzyName(combo.property_name);
       const { data } = await salesDb
         .from('rv_rentals')
         .select('id, price, price_sqft, size_sqft, date, bedrooms')
         .eq('is_valid', true)
         .eq('property_category', 'Residential')
-        .ilike('property_name', combo.property_name)
-        .ilike('community_name', combo.community)
+        .ilike('property_name', namePattern)
+        .ilike('community_name', `%${combo.community.toLowerCase()}%`)
         .eq('bedrooms', bed)
         .gte('date', '2025-01-01')
         .order('date', { ascending: false })
-        .limit(3);
+        .limit(10);
       return (data || []).map(r => ({ ...r, _type: 'Rent listing' }));
     }, 'rent'),
   ]);
