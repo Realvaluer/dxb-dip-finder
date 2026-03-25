@@ -160,7 +160,7 @@ function applySort(query, sort) {
     case 'dip_aed':
       return query.order('dip_price', { ascending: true, nullsFirst: false });
     case 'listing_change':
-      return query.not('listing_change', 'is', null).order('listing_change', { ascending: true, nullsFirst: false });
+      return query.not('listing_change', 'is', null).neq('listing_change', 0).order('listing_change', { ascending: true, nullsFirst: false });
     case 'price_asc':
       return query.order('price_aed', { ascending: true });
     case 'price_desc':
