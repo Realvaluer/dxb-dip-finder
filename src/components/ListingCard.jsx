@@ -5,8 +5,8 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const navigate = useNavigate();
   const l = listing;
 
-  // Pill shows transaction % (listing vs last sale/rent), fallback to listing vs listing
-  const displayPct = l.last_sale_change_pct ?? l.change_pct;
+  // Pill shows transaction % only (no fallback — hide if no transaction match)
+  const displayPct = l.last_sale_change_pct;
   const isDecrease = displayPct != null && displayPct < 0;
   const isIncrease = displayPct != null && displayPct > 0;
   const absChangePct = displayPct != null ? Math.abs(displayPct).toFixed(1) : null;
