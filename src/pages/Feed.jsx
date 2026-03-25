@@ -221,13 +221,54 @@ export default function Feed() {
             }}
           />
 
-          {/* Active date chip */}
-          {hasDateFilter && (
-            <div className="px-4 pb-1 flex items-center gap-2">
-              <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5">
-                {filters.date_from || '...'} – {filters.date_to || '...'}
-                <button onClick={() => { setFilter('date_from', ''); setFilter('date_to', ''); }} className="ml-0.5 font-bold">×</button>
-              </span>
+          {/* Active filter chips */}
+          {(filters.communities.length > 0 || filters.buildings.length > 0 || hasDateFilter || filters.type || filters.bedrooms !== '' || filters.min_dip || filters.max_price || filters.min_sqft) && (
+            <div className="px-4 pb-1 flex items-center gap-2 flex-wrap overflow-hidden">
+              {filters.communities.map(c => (
+                <span key={`c-${c}`} className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  {c}
+                  <button onClick={() => setFilter('communities', filters.communities.filter(x => x !== c))} className="font-bold">×</button>
+                </span>
+              ))}
+              {filters.buildings.map(b => (
+                <span key={`b-${b}`} className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  {b}
+                  <button onClick={() => setFilter('buildings', filters.buildings.filter(x => x !== b))} className="font-bold">×</button>
+                </span>
+              ))}
+              {filters.type && (
+                <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  {filters.type}
+                  <button onClick={() => setFilter('type', '')} className="font-bold">×</button>
+                </span>
+              )}
+              {filters.bedrooms !== '' && (
+                <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  {filters.bedrooms === '0' ? 'Studio' : `${filters.bedrooms} Bed`}
+                  <button onClick={() => setFilter('bedrooms', '')} className="font-bold">×</button>
+                </span>
+              )}
+              {hasDateFilter && (
+                <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  {filters.date_from || '...'} – {filters.date_to || '...'}
+                  <button onClick={() => setFilters({ date_from: '', date_to: '' })} className="font-bold">×</button>
+                </span>
+              )}
+              {filters.min_dip && (
+                <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  Min {filters.min_dip}% dip
+                  <button onClick={() => setFilter('min_dip', '')} className="font-bold">×</button>
+                </span>
+              )}
+              {filters.max_price && (
+                <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  Max AED {parseInt(filters.max_price).toLocaleString()}
+                  <button onClick={() => setFilter('max_price', '')} className="font-bold">×</button>
+                </span>
+              )}
+              <button onClick={resetFilters} className="text-dip-red text-[11px] font-medium whitespace-nowrap">
+                Clear
+              </button>
             </div>
           )}
 
