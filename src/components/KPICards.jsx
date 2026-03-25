@@ -2,10 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { formatPriceShort } from '../utils';
 
 const CARDS = [
-  { key: 'highest_dip_pct', accent: 'bg-dip-red', label: 'Biggest % drop' },
-  { key: 'highest_dip_aed', accent: 'bg-dip-orange', label: 'Biggest AED drop' },
-  { key: 'most_active_community', accent: 'bg-blue-500', label: 'Most active community' },
-  { key: 'new_today', accent: 'bg-teal-500', label: 'New today' },
+  { key: 'highest_dip_pct', accent: 'bg-dip-red', label: 'Highest % drop today' },
+  { key: 'highest_dip_aed', accent: 'bg-dip-orange', label: 'Highest AED drop today' },
+  { key: 'most_drops_community', accent: 'bg-blue-500', label: 'Community with most drops' },
+  { key: 'dips_today', accent: 'bg-teal-500', label: 'Dips in last 24h' },
 ];
 
 export default function KPICards({ data, loading, onCommunityClick }) {
@@ -16,8 +16,8 @@ export default function KPICards({ data, loading, onCommunityClick }) {
     const d = data[card.key];
     if (card.key === 'highest_dip_pct') return d ? `${d.change_pct}%` : '—';
     if (card.key === 'highest_dip_aed') return d ? `−AED ${formatPriceShort(Math.abs(d.change_aed))}` : '—';
-    if (card.key === 'most_active_community') return d?.community || '—';
-    if (card.key === 'new_today') return data.new_today ?? 0;
+    if (card.key === 'most_drops_community') return d?.community || '—';
+    if (card.key === 'dips_today') return data.dips_today ?? 0;
     return '—';
   }
 
@@ -26,8 +26,8 @@ export default function KPICards({ data, loading, onCommunityClick }) {
     const d = data[card.key];
     if (card.key === 'highest_dip_pct' && d) return `${d.property_name || ''} · ${d.community || ''}`;
     if (card.key === 'highest_dip_aed' && d) return `${d.property_name || ''} · ${d.community || ''}`;
-    if (card.key === 'most_active_community' && d) return `${d.count} listings with changes`;
-    if (card.key === 'new_today') return 'Listings in last 24h';
+    if (card.key === 'most_drops_community' && d) return `${d.count} listings with drops`;
+    if (card.key === 'dips_today') return 'Price drops today';
     return '';
   }
 
@@ -36,7 +36,7 @@ export default function KPICards({ data, loading, onCommunityClick }) {
     const d = data[card.key];
     if (card.key === 'highest_dip_pct' && d?.listing_id) navigate(`/listing/${d.listing_id}`);
     if (card.key === 'highest_dip_aed' && d?.listing_id) navigate(`/listing/${d.listing_id}`);
-    if (card.key === 'most_active_community' && d?.community) onCommunityClick(d.community);
+    if (card.key === 'most_drops_community' && d?.community) onCommunityClick(d.community);
   }
 
   return (

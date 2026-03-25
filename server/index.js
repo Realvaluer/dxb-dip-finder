@@ -294,33 +294,7 @@ app.get('/api/listings/:id', async (req, res) => {
 
 app.get('/api/kpis', async (req, res) => {
   try {
-    // Biggest % drop
-    let pctQuery = supabase
-      .from(TABLE)
-      .select('id, dip_pct, property_name, community')
-      .eq('is_valid', true)
-      .not('dip_pct', 'is', null)
-      .lt('dip_pct', 0)
-      .order('dip_pct', { ascending: true })
-      .limit(1);
-    pctQuery = applyFilters(pctQuery, req.query);
-    const { data: pctData } = await pctQuery;
-
-    // Biggest AED drop
-    let aedQuery = supabase
-      .from(TABLE)
-      .select('id, dip_price, property_name, community')
-      .eq('is_valid', true)
-      .not('dip_price', 'is', null)
-      .lt('dip_price', 0)
-      .order('dip_price', { ascending: true })
-      .limit(1);
-    aedQuery = applyFilters(aedQuery, req.query);
-    const { data: aedData } = await aedQuery;
-
-    // Most active community — fetch enough data to aggregate
-
-    // Latest date for "new today"
+    // Get latest date in DB as "today"
     const { data: latestRow } = await supabase
       .from(TABLE)
       .select('date_listed')
@@ -330,26 +304,45 @@ app.get('/api/kpis', async (req, res) => {
       .single();
     const latestDate = latestRow?.date_listed;
 
-    let todayQuery = supabase
+    // 1. Highest % drop TODAY
+    let pctQuery = supabase
       .from(TABLE)
-      .select('id', { count: 'exact', head: true })
+      .select('id, dip_pct, property_name, community')
       .eq('is_valid', true)
-      .eq('date_listed', latestDate || '');
-    todayQuery = applyFilters(todayQuery, req.query);
-    const { count: newToday } = await todayQuery;
+      .eq('date_listed', latestDate || '')
+      .not('dip_pct', 'is', null)
+      .lt('dip_pct', 0)
+      .order('dip_pct', { ascending: true })
+      .limit(1);
+    pctQuery = applyFilters(pctQuery, req.query);
+    const { data: pctData } = await pctQuery;
 
-    let mostActive = null;
+    // 2. Highest AED drop TODAY
+    let aedQuery = supabase
+      .from(TABLE)
+      .select('id, dip_price, property_name, community')
+      .eq('is_valid', true)
+      .eq('date_listed', latestDate || '')
+      .not('dip_price', 'is', null)
+      .lt('dip_price', 0)
+      .order('dip_price', { ascending: true })
+      .limit(1);
+    aedQuery = applyFilters(aedQuery, req.query);
+    const { data: aedData } = await aedQuery;
+
+    // 3. Community with most drops (negative dip_pct only)
+    let mostDrops = null;
     {
-      // Fetch communities with price changes — paginate to get enough data
       let allComm = [];
       let from = 0;
       const batchSize = 1000;
-      for (let i = 0; i < 10; i++) { // max 10k rows
+      for (let i = 0; i < 10; i++) {
         const { data: batch } = await supabase
           .from(TABLE)
           .select('community')
           .eq('is_valid', true)
           .not('dip_pct', 'is', null)
+          .lt('dip_pct', 0)
           .range(from, from + batchSize - 1);
         if (!batch || batch.length === 0) break;
         allComm = allComm.concat(batch);
@@ -360,9 +353,20 @@ app.get('/api/kpis', async (req, res) => {
         const counts = {};
         allComm.forEach(r => { if (r.community) counts[r.community] = (counts[r.community] || 0) + 1; });
         const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-        if (top) mostActive = { community: top[0], count: top[1] };
+        if (top) mostDrops = { community: top[0], count: top[1] };
       }
     }
+
+    // 4. Dips in last 24h (listings with negative dip_pct on latest date)
+    let dipsQuery = supabase
+      .from(TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('is_valid', true)
+      .eq('date_listed', latestDate || '')
+      .not('dip_pct', 'is', null)
+      .lt('dip_pct', 0);
+    dipsQuery = applyFilters(dipsQuery, req.query);
+    const { count: dipsToday } = await dipsQuery;
 
     const highestPct = pctData?.[0] ? {
       listing_id: pctData[0].id,
@@ -381,8 +385,8 @@ app.get('/api/kpis', async (req, res) => {
     res.json({
       highest_dip_pct: highestPct,
       highest_dip_aed: highestAed,
-      most_active_community: mostActive,
-      new_today: newToday || 0,
+      most_drops_community: mostDrops,
+      dips_today: dipsToday || 0,
     });
   } catch (err) {
     console.error('KPIs error:', err);
