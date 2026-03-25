@@ -88,9 +88,7 @@ function buildFilterParams(localFilters) {
       (value || []).forEach(v => params.append('property_name[]', v));
     } else if (key === 'sort' && value && value !== 'newest') {
       params.set(key, value);
-    } else if (key === 'min_dip' && parseFloat(value) > 0) {
-      params.set(key, value);
-    } else if (key !== 'sort' && key !== 'min_dip' && value) {
+    } else if (key !== 'sort' && value) {
       params.set(key, value);
     }
   }
@@ -110,7 +108,6 @@ export default function FilterSheet({ open, onClose, filters, filterOptions }) {
       setLocalFilters({
         sort: filters.sort,
         purpose: filters.purpose,
-        min_dip: filters.min_dip,
         bedrooms: filters.bedrooms,
         communities: [...filters.communities],
         buildings: [...filters.buildings],
@@ -188,7 +185,6 @@ export default function FilterSheet({ open, onClose, filters, filterOptions }) {
   if (!open) return null;
 
   const opts = filterOptions || { communities: [], property_names: [], types: [], sources: [] };
-  const minDip = parseFloat(localFilters.min_dip || 0);
   const countDisplay = countLoading ? '—' : (liveCount != null ? liveCount.toLocaleString() : '...');
 
   return (
@@ -237,18 +233,6 @@ export default function FilterSheet({ open, onClose, filters, filterOptions }) {
                 <Pill key={preset.label} label={preset.label} selected={false} onClick={preset.fn} />
               ))}
             </div>
-          </div>
-
-          {/* Min dip */}
-          <div>
-            <div className="text-xs font-medium text-muted uppercase tracking-wider mb-2">Min dip %: {minDip}%</div>
-            <input
-              type="range"
-              min={0} max={50} step={1}
-              value={minDip}
-              onChange={e => setLocal('min_dip', e.target.value)}
-              className="w-full accent-accent"
-            />
           </div>
 
           {/* Bedrooms */}

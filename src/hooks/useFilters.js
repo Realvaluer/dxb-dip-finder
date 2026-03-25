@@ -11,7 +11,7 @@ export default function useFilters() {
     type: searchParams.get('type') || '',
     source: searchParams.get('source') || '',
     bedrooms: searchParams.get('bedrooms') || '',
-    min_dip: searchParams.get('min_dip') || '0',
+    min_dip: searchParams.get('min_dip') || '',
     max_price: searchParams.get('max_price') || '',
     min_sqft: searchParams.get('min_sqft') || '',
     date_from: searchParams.get('date_from') || '',
@@ -55,7 +55,7 @@ export default function useFilters() {
     if (filters.type) count++;
     if (filters.source) count++;
     if (filters.bedrooms) count++;
-    if (parseFloat(filters.min_dip) > 0) count++;
+    if (filters.min_dip) count++;
     if (filters.max_price) count++;
     if (filters.min_sqft) count++;
     if (filters.date_from || filters.date_to) count++;

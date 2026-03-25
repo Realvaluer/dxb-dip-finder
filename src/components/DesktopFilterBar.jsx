@@ -227,21 +227,6 @@ export default function DesktopFilterBar({ filters, setFilter, setFilters, filte
         <div className="w-px h-6 bg-border mx-1" />
 
         {/* Min Dip % */}
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-muted">Min Dip</span>
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={filters.min_dip || ''}
-            onChange={e => setFilter('min_dip', e.target.value)}
-            placeholder="%"
-            className={`w-16 px-2 py-1.5 rounded-lg text-xs border bg-card outline-none ${
-              filters.min_dip ? 'border-accent/40 text-accent' : 'border-border text-muted'
-            }`}
-          />
-        </div>
-
         {/* Max Price */}
         <div className="flex items-center gap-1">
           <span className="text-[10px] text-muted">Max Price</span>

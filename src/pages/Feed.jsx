@@ -222,8 +222,14 @@ export default function Feed() {
           />
 
           {/* Active filter chips */}
-          {(filters.communities.length > 0 || filters.buildings.length > 0 || hasDateFilter || filters.type || filters.bedrooms !== '' || filters.min_dip || filters.max_price || filters.min_sqft) && (
+          {(filters.search || filters.communities.length > 0 || filters.buildings.length > 0 || hasDateFilter || filters.type || filters.bedrooms !== '' || filters.max_price || filters.min_sqft) && (
             <div className="px-4 pb-1 flex items-center gap-2 flex-wrap overflow-hidden">
+              {filters.search && (
+                <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
+                  {filters.search}
+                  <button onClick={() => setFilter('search', '')} className="font-bold">×</button>
+                </span>
+              )}
               {filters.communities.map(c => (
                 <span key={`c-${c}`} className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
                   {c}
@@ -252,12 +258,6 @@ export default function Feed() {
                 <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
                   {filters.date_from || '...'} – {filters.date_to || '...'}
                   <button onClick={() => setFilters({ date_from: '', date_to: '' })} className="font-bold">×</button>
-                </span>
-              )}
-              {filters.min_dip && (
-                <span className="bg-accent/20 text-accent text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap">
-                  Min {filters.min_dip}% dip
-                  <button onClick={() => setFilter('min_dip', '')} className="font-bold">×</button>
                 </span>
               )}
               {filters.max_price && (
