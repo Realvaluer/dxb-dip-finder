@@ -114,7 +114,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
       {/* Row 5c: Listing vs Last Sale */}
       {hasLastSale && (
         <div className={`${hasSameListingChange || hasChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
-          <span className="font-semibold text-white">Listing vs. Last Sale:</span>{' '}
+          <span className="font-semibold text-white">{l.purpose?.toLowerCase() === 'rent' ? 'Listing vs. Last Rent:' : 'Listing vs. Last Sale:'}</span>{' '}
           {saleDecrease ? (
             <span className="text-dip-red font-medium">−{formatPrice(Math.abs(saleChange))}</span>
           ) : saleIncrease ? (
@@ -122,7 +122,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
           ) : (
             <span className="font-medium">No change</span>
           )}
-          {' '}vs sale {formatPrice(l.last_sale_price)} · {formatDate(l.last_sale_date)}
+          {' '}vs {l.purpose?.toLowerCase() === 'rent' ? 'rent' : 'sale'} {formatPrice(l.last_sale_price)} · {formatDate(l.last_sale_date)}
         </div>
       )}
 

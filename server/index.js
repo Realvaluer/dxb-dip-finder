@@ -95,76 +95,106 @@ async function fetchRefData(rows) {
   return refMap;
 }
 
-// Batch-fetch last sale for each SALE listing from RealValuer sales DB
+// Batch-fetch last comparable transaction for each listing from RealValuer DB
+// SALE listings → rv_sales (Sale/Pre-registration after 1 Jan 2025)
+// RENT listings → rv_listings (Rent after 1 Jan 2025)
 // Match: same property_name, same community, same bedrooms, ±10% size
-// Only looks at Sale and Pre-registration transactions after 1 Jan 2025
 async function fetchLastSales(rows) {
   if (!salesDb) return {};
-  const saleMap = {};
+  const resultMap = {};
 
-  // Only match for SALE listings, not rent
+  // Split by purpose
   const saleRows = rows.filter(r => r.purpose && r.purpose.toLowerCase() === 'sale');
+  const rentRows = rows.filter(r => r.purpose && r.purpose.toLowerCase() === 'rent');
 
-  // Group unique property/community/bedrooms combos to minimize queries
-  const combos = new Map();
-  for (const row of saleRows) {
-    if (!row.property_name || !row.community || row.bedrooms == null) continue;
-    const key = `${row.property_name.toLowerCase()}|${row.community.toLowerCase()}|${row.bedrooms}`;
-    if (!combos.has(key)) {
-      combos.set(key, { property_name: row.property_name, community: row.community, bedrooms: row.bedrooms, listings: [] });
-    }
-    combos.get(key).listings.push(row);
-  }
-
-  // Query sales for each combo (parallel, max 10 concurrent)
-  const entries = [...combos.values()];
-  for (let i = 0; i < entries.length; i += 10) {
-    const batch = entries.slice(i, i + 10);
-    await Promise.all(batch.map(async (combo) => {
-      try {
-        const bed = parseInt(combo.bedrooms, 10);
-        const { data } = await salesDb
-          .from('rv_sales')
-          .select('id, price, price_sqft, size_sqft, date, property_name, community_name, bedrooms, subtype')
-          .eq('is_valid', true)
-          .or('subtype.eq.Sale,subtype.eq.Pre-registration')
-          .ilike('property_name', combo.property_name)
-          .ilike('community_name', combo.community)
-          .eq('bedrooms', bed)
-          .gte('date', '2025-01-01')
-          .order('date', { ascending: false })
-          .limit(3);
-
-        if (!data || data.length === 0) return;
-
-        // For each listing in this combo, find best matching sale (±10% size)
-        for (const listing of combo.listings) {
-          const listingSize = listing.size_sqft || 0;
-          const minSize = listingSize * 0.9;
-          const maxSize = listingSize * 1.1;
-
-          const match = data.find(s => {
-            if (!listingSize || !s.size_sqft) return true; // skip size check if missing
-            return s.size_sqft >= minSize && s.size_sqft <= maxSize;
-          });
-
-          if (match) {
-            saleMap[listing.id] = {
-              sale_price: match.price,
-              sale_price_sqft: match.price_sqft,
-              sale_date: match.date,
-              sale_size: match.size_sqft,
-              sale_bedrooms: match.bedrooms,
-              sale_type: match.transaction_type_name,
-            };
-          }
-        }
-      } catch (err) {
-        // Silently skip failed lookups
+  // Helper: group rows by property/community/bedrooms
+  function groupCombos(rowList) {
+    const combos = new Map();
+    for (const row of rowList) {
+      if (!row.property_name || !row.community || row.bedrooms == null) continue;
+      const key = `${row.property_name.toLowerCase()}|${row.community.toLowerCase()}|${row.bedrooms}`;
+      if (!combos.has(key)) {
+        combos.set(key, { property_name: row.property_name, community: row.community, bedrooms: row.bedrooms, listings: [] });
       }
-    }));
+      combos.get(key).listings.push(row);
+    }
+    return [...combos.values()];
   }
-  return saleMap;
+
+  // Helper: match listing to best result by ±10% size
+  function matchBySize(listing, candidates) {
+    const listingSize = listing.size_sqft || 0;
+    const minSize = listingSize * 0.9;
+    const maxSize = listingSize * 1.1;
+    return candidates.find(s => {
+      if (!listingSize || !s.size_sqft) return true;
+      return s.size_sqft >= minSize && s.size_sqft <= maxSize;
+    });
+  }
+
+  // Helper: process combos in parallel batches
+  async function processCombos(entries, queryFn) {
+    for (let i = 0; i < entries.length; i += 10) {
+      const batch = entries.slice(i, i + 10);
+      await Promise.all(batch.map(async (combo) => {
+        try {
+          const data = await queryFn(combo);
+          if (!data || data.length === 0) return;
+          for (const listing of combo.listings) {
+            const match = matchBySize(listing, data);
+            if (match) {
+              resultMap[listing.id] = {
+                sale_price: match.price,
+                sale_price_sqft: match.price_sqft,
+                sale_date: match.date,
+                sale_size: match.size_sqft,
+                sale_bedrooms: match.bedrooms,
+                sale_type: match._type || null,
+              };
+            }
+          }
+        } catch (err) { /* skip */ }
+      }));
+    }
+  }
+
+  // ── SALE listings → rv_sales ──
+  const saleCombos = groupCombos(saleRows);
+  await processCombos(saleCombos, async (combo) => {
+    const bed = parseInt(combo.bedrooms, 10);
+    const { data } = await salesDb
+      .from('rv_sales')
+      .select('id, price, price_sqft, size_sqft, date, bedrooms, subtype')
+      .eq('is_valid', true)
+      .or('subtype.eq.Sale,subtype.eq.Pre-registration')
+      .ilike('property_name', combo.property_name)
+      .ilike('community_name', combo.community)
+      .eq('bedrooms', bed)
+      .gte('date', '2025-01-01')
+      .order('date', { ascending: false })
+      .limit(3);
+    return (data || []).map(r => ({ ...r, _type: r.subtype }));
+  });
+
+  // ── RENT listings → rv_listings ──
+  const rentCombos = groupCombos(rentRows);
+  await processCombos(rentCombos, async (combo) => {
+    const bed = parseInt(combo.bedrooms, 10);
+    const { data } = await salesDb
+      .from('rv_listings')
+      .select('id, price, price_sqft, size_sqft, date, bedrooms')
+      .eq('is_valid', true)
+      .ilike('listing_type', 'Rent')
+      .ilike('property_name', combo.property_name)
+      .ilike('community_name', combo.community)
+      .eq('bedrooms', String(bed))
+      .gte('date', '2025-01-01')
+      .order('date', { ascending: false })
+      .limit(3);
+    return (data || []).map(r => ({ ...r, _type: 'Rent listing' }));
+  });
+
+  return resultMap;
 }
 
 function toArray(val) {

@@ -228,34 +228,36 @@ export default function ListingDetail() {
           </>
         )}
 
-        {/* Listing vs Last Sale */}
+        {/* Listing vs Last Sale/Rent */}
         {hasLastSale && (
           <>
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Listing vs. Last Sale</div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">
+                {l.purpose?.toLowerCase() === 'rent' ? 'Listing vs. Last Rent' : 'Listing vs. Last Sale'}
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-card rounded-xl p-3">
                   <div className="text-[10px] text-muted">Listing price</div>
                   <div className="text-sm font-bold mt-0.5">{formatPrice(l.price_aed)}</div>
                 </div>
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Last DLD sale</div>
+                  <div className="text-[10px] text-muted">{l.purpose?.toLowerCase() === 'rent' ? 'Last rent' : 'Last DLD sale'}</div>
                   <div className="text-sm font-bold mt-0.5">{formatPrice(l.last_sale_price)}</div>
                 </div>
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">{saleDecrease ? 'Below sale by' : 'Above sale by'}</div>
+                  <div className="text-[10px] text-muted">{saleDecrease ? (l.purpose?.toLowerCase() === 'rent' ? 'Below rent by' : 'Below sale by') : (l.purpose?.toLowerCase() === 'rent' ? 'Above rent by' : 'Above sale by')}</div>
                   <div className={`text-sm font-bold mt-0.5 ${saleDecrease ? 'text-dip-red' : 'text-accent'}`}>
                     {saleDecrease ? '−' : '+'}{formatPrice(Math.abs(saleChange))}
                   </div>
                 </div>
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Sale date</div>
+                  <div className="text-[10px] text-muted">{l.purpose?.toLowerCase() === 'rent' ? 'Rent date' : 'Sale date'}</div>
                   <div className="text-sm font-bold mt-0.5">{formatDate(l.last_sale_date)}</div>
                 </div>
               </div>
               {l.last_sale_type && (
                 <div className="mt-2 text-[11px] text-muted">
-                  Transaction: {l.last_sale_type} {l.last_sale_size ? `· ${l.last_sale_size.toLocaleString()} sqft` : ''}
+                  {l.purpose?.toLowerCase() === 'rent' ? 'Source:' : 'Transaction:'} {l.last_sale_type} {l.last_sale_size ? `· ${l.last_sale_size.toLocaleString()} sqft` : ''}
                 </div>
               )}
             </div>
