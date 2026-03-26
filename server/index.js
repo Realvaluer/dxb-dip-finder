@@ -210,47 +210,98 @@ async function fetchLastSales(rows) {
   const saleCombos = groupCombos(saleRows);
   const rentCombos = groupCombos(rentRows);
 
-  // Normalize name for fuzzy matching: "DT1" → "%dt1%", "Marina Gate 1" → "%marina gate 1%"
+  // Normalize name for fuzzy matching: "DT1" → "%dt%1%", strip special chars
   function fuzzyName(name) {
-    let n = name.toLowerCase().replace(/^the\s+/i, '').trim();
+    let n = name.toLowerCase().replace(/^the\s+/i, '').replace(/[''`]/g, '').trim();
     // Insert % at letter↔digit boundaries: "dt1" → "dt%1", "a2" → "a%2"
     n = n.replace(/([a-z])(\d)/g, '$1%$2');
     n = n.replace(/(\d)([a-z])/g, '$1%$2');
     return `%${n}%`;
   }
 
+  // Community aliases: DDF name → also try these in RV
+  const COMMUNITY_ALIASES = {
+    'dubai south': ['azizi venice', 'dubai south'],
+    'downtown dubai': ['downtown dubai', 'business bay'], // SLS is in BB in RV
+    "za'abeel": ['zaabeel first', 'zaabeel second', 'zaabeel'],
+  };
+
+  // Build community pattern: check aliases, strip special chars
+  function communityPattern(community) {
+    const key = community.toLowerCase();
+    const aliases = COMMUNITY_ALIASES[key];
+    if (aliases) {
+      // Return multiple patterns joined for OR matching
+      return aliases;
+    }
+    return [key.replace(/[''`()]/g, '')];
+  }
+
+  // Query helper: tries name pattern + community patterns, returns best results
+  async function queryWithFallbacks(table, namePattern, community, bed, extraFilters, selectFields) {
+    const commPatterns = communityPattern(community);
+
+    // Try each community alias
+    for (const cp of commPatterns) {
+      let q = salesDb.from(table).select(selectFields).eq('is_valid', true);
+      for (const [k, v] of Object.entries(extraFilters)) {
+        if (k === 'or') q = q.or(v);
+        else q = q.eq(k, v);
+      }
+      q = q.ilike('property_name', namePattern)
+        .ilike('community_name', `%${cp}%`)
+        .eq('bedrooms', bed)
+        .gte('date', '2025-01-01')
+        .order('date', { ascending: false })
+        .limit(10);
+      const { data } = await q;
+      if (data && data.length > 0) return data;
+    }
+
+    // Fallback: try reversed word order (e.g. "Binghatti Ghost" → "ghost%binghatti")
+    const words = namePattern.replace(/%/g, ' ').trim().split(/\s+/);
+    if (words.length >= 2) {
+      const reversed = `%${words.reverse().join('%')}%`;
+      for (const cp of commPatterns) {
+        let q = salesDb.from(table).select(selectFields).eq('is_valid', true);
+        for (const [k, v] of Object.entries(extraFilters)) {
+          if (k === 'or') q = q.or(v);
+          else q = q.eq(k, v);
+        }
+        q = q.ilike('property_name', reversed)
+          .ilike('community_name', `%${cp}%`)
+          .eq('bedrooms', bed)
+          .gte('date', '2025-01-01')
+          .order('date', { ascending: false })
+          .limit(10);
+        const { data } = await q;
+        if (data && data.length > 0) return data;
+      }
+    }
+
+    return [];
+  }
+
   await Promise.all([
     processCombos(saleCombos, async (combo) => {
       const bed = parseInt(combo.bedrooms, 10);
       const namePattern = fuzzyName(combo.property_name);
-      const { data } = await salesDb
-        .from('rv_sales')
-        .select('id, price, price_sqft, size_sqft, date, bedrooms, subtype')
-        .eq('is_valid', true)
-        .or('subtype.eq.Sale,subtype.eq.Pre-registration')
-        .ilike('property_name', namePattern)
-        .ilike('community_name', `%${combo.community.toLowerCase()}%`)
-        .eq('bedrooms', bed)
-        .gte('date', '2025-01-01')
-        .order('date', { ascending: false })
-        .limit(10);
-      return (data || []).map(r => ({ ...r, _type: r.subtype }));
+      const data = await queryWithFallbacks(
+        'rv_sales', namePattern, combo.community, bed,
+        { or: 'subtype.eq.Sale,subtype.eq.Pre-registration' },
+        'id, price, price_sqft, size_sqft, date, bedrooms, subtype'
+      );
+      return data.map(r => ({ ...r, _type: r.subtype }));
     }, 'sale'),
     processCombos(rentCombos, async (combo) => {
       const bed = parseInt(combo.bedrooms, 10);
       const namePattern = fuzzyName(combo.property_name);
-      const { data } = await salesDb
-        .from('rv_rentals')
-        .select('id, price, price_sqft, size_sqft, date, bedrooms')
-        .eq('is_valid', true)
-        .eq('property_category', 'Residential')
-        .ilike('property_name', namePattern)
-        .ilike('community_name', `%${combo.community.toLowerCase()}%`)
-        .eq('bedrooms', bed)
-        .gte('date', '2025-01-01')
-        .order('date', { ascending: false })
-        .limit(10);
-      return (data || []).map(r => ({ ...r, _type: 'Rent listing' }));
+      const data = await queryWithFallbacks(
+        'rv_rentals', namePattern, combo.community, bed,
+        { property_category: 'Residential' },
+        'id, price, price_sqft, size_sqft, date, bedrooms'
+      );
+      return data.map(r => ({ ...r, _type: 'Rent listing' }));
     }, 'rent'),
   ]);
 
