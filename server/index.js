@@ -22,7 +22,7 @@ app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 
 // Sale/rent combo cache: key → { data, ts }
 const saleCache = new Map();
-const SALE_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
+const SALE_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
 function getCachedSale(key) {
   const entry = saleCache.get(key);
@@ -36,7 +36,7 @@ function setCachedSale(key, data) {
 
 // KPI cache: filterKey → { data, ts }
 const kpiCache = new Map();
-const KPI_CACHE_TTL = 5 * 60 * 1000; // 5 min
+const KPI_CACHE_TTL = 15 * 60 * 1000; // 15 min
 
 // Filter-options cache (single entry, rarely changes)
 let filterOptionsCache = { data: null, ts: 0 };
@@ -99,12 +99,13 @@ function mapRow(row, refData, saleData) {
     dip_prev_source: row.dip_prev_source || (ref ? ref.source : null),
     dip_prev_size: row.dip_prev_size || (ref ? ref.size_sqft : null),
     dip_prev_furnished: row.dip_prev_furnished || (ref ? ref.furnished : null),
-    // Listing vs Last Sale
-    last_sale_price: sale ? sale.sale_price : null,
-    last_sale_date: sale ? sale.sale_date : null,
-    last_sale_change: saleChange,
-    last_sale_size: sale ? sale.sale_size : null,
-    last_sale_type: sale ? sale.sale_type : null,
+    // Listing vs Last Transaction — prefer pre-computed DB columns, fallback to runtime lookup
+    last_sale_price: row.last_txn_price || (sale ? sale.sale_price : null),
+    last_sale_date: row.last_txn_date || (sale ? sale.sale_date : null),
+    last_sale_change: row.last_txn_change || saleChange,
+    last_sale_change_pct: row.last_txn_change_pct != null ? Math.round(row.last_txn_change_pct * 10) / 10 : (sale && sale.sale_price ? Math.round(((row.price_aed - sale.sale_price) / sale.sale_price) * 1000) / 10 : null),
+    last_sale_size: row.last_txn_size || (sale ? sale.sale_size : null),
+    last_sale_type: row.last_txn_type || (sale ? sale.sale_type : null),
   };
 }
 
@@ -326,9 +327,9 @@ function applyFilters(query, params) {
 function applySort(query, sort) {
   switch (sort) {
     case 'dip_pct':
-      return query.order('dip_pct', { ascending: true, nullsFirst: false });
+      return query.order('last_txn_change_pct', { ascending: true, nullsFirst: false });
     case 'dip_aed':
-      return query.order('dip_price', { ascending: true, nullsFirst: false });
+      return query.order('last_txn_change', { ascending: true, nullsFirst: false });
     case 'listing_change':
       return query.order('listing_change', { ascending: true, nullsFirst: false });
     case 'price_asc':
@@ -347,56 +348,31 @@ app.get('/api/listings', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = parseInt(req.query.offset, 10) || 0;
-    const sort = req.query.sort;
-    const isTxnSort = sort === 'dip_pct' || sort === 'dip_aed';
 
     let query = supabase
       .from(TABLE)
       .select(LISTING_SELECT, { count: 'exact' })
-      .eq('is_valid', true);
+      .eq('is_valid', true)
+      .range(offset, offset + limit - 1);
 
     query = applyFilters(query, req.query);
-
-    if (isTxnSort) {
-      // For transaction sorts: fetch larger batch, compute txn %, re-sort client-side
-      query = query.order(sort === 'dip_pct' ? 'dip_pct' : 'dip_price', { ascending: true, nullsFirst: false })
-        .range(0, Math.max(offset + limit * 3, 200) - 1);
-    } else {
-      query = applySort(query, sort);
-      query = query.range(offset, offset + limit - 1);
-    }
+    query = applySort(query, req.query.sort);
 
     const { data, count, error } = await query;
     if (error) throw error;
 
-    // Fetch ref data and sale data in parallel
+    // Fetch ref data (fast, same DB). Only fetch sales if DB columns not yet populated.
+    const rows = data || [];
+    const needsSaleLookup = rows.some(r => r.last_txn_price == null);
     const [refMap, saleMap] = await Promise.all([
-      fetchRefData(data || []),
-      fetchLastSales(data || []),
+      fetchRefData(rows),
+      needsSaleLookup ? fetchLastSales(rows) : Promise.resolve({}),
     ]);
 
-    let listings = (data || []).map(r => {
+    const listings = rows.map(r => {
       const sale = saleMap[r.id];
-      const mapped = mapRow(r, refMap[r.dip_ref_id], sale ? { sale_price: sale.sale_price, sale_date: sale.sale_date, sale_size: sale.sale_size, sale_type: sale.sale_type } : null);
-      if (sale) {
-        const change = r.price_aed - sale.sale_price;
-        mapped.last_sale_change_pct = sale.sale_price ? Math.round((change / sale.sale_price) * 1000) / 10 : null;
-      }
-      return mapped;
+      return mapRow(r, refMap[r.dip_ref_id], sale ? { sale_price: sale.sale_price, sale_date: sale.sale_date, sale_size: sale.sale_size, sale_type: sale.sale_type } : null);
     });
-
-    // Re-sort by transaction data if needed
-    if (isTxnSort) {
-      const field = sort === 'dip_pct' ? 'last_sale_change_pct' : 'last_sale_change';
-      listings.sort((a, b) => {
-        const av = a[field], bv = b[field];
-        if (av == null && bv == null) return 0;
-        if (av == null) return 1;
-        if (bv == null) return -1;
-        return av - bv; // ascending = most negative first
-      });
-      listings = listings.slice(offset, offset + limit);
-    }
 
     res.json({ listings, total: count || 0 });
   } catch (err) {
@@ -406,6 +382,75 @@ app.get('/api/listings', async (req, res) => {
 });
 
 // ── POST /api/listings/sales — non-blocking sale/rent lookup ────────────────
+
+// ── POST /api/admin/compute-transactions — batch pre-compute last_txn_* ──────
+
+app.post('/api/admin/compute-transactions', async (req, res) => {
+  if (!salesDb) return res.json({ error: 'Sales DB not configured' });
+  try {
+    const batchSize = 500;
+    let processed = 0, updated = 0, offset = 0;
+    const startTime = Date.now();
+
+    while (true) {
+      const { data: rows } = await supabase
+        .from(TABLE)
+        .select('id, property_name, community, bedrooms, size_sqft, purpose, price_aed')
+        .eq('is_valid', true)
+        .is('last_txn_price', null)
+        .range(offset, offset + batchSize - 1);
+
+      if (!rows || rows.length === 0) break;
+
+      const saleMap = await fetchLastSales(rows);
+      const updates = [];
+
+      for (const row of rows) {
+        const sale = saleMap[row.id];
+        if (sale) {
+          const change = row.price_aed - sale.sale_price;
+          const changePct = sale.sale_price ? Math.round(((change) / sale.sale_price) * 1000) / 10 : null;
+          updates.push({
+            id: row.id,
+            last_txn_price: sale.sale_price,
+            last_txn_date: sale.sale_date,
+            last_txn_change: change,
+            last_txn_change_pct: changePct,
+            last_txn_size: sale.sale_size,
+            last_txn_type: sale.sale_type,
+          });
+        }
+      }
+
+      // Batch update via individual upserts (Supabase doesn't support bulk update by different values)
+      for (const u of updates) {
+        await supabase.from(TABLE).update({
+          last_txn_price: u.last_txn_price,
+          last_txn_date: u.last_txn_date,
+          last_txn_change: u.last_txn_change,
+          last_txn_change_pct: u.last_txn_change_pct,
+          last_txn_size: u.last_txn_size,
+          last_txn_type: u.last_txn_type,
+        }).eq('id', u.id);
+      }
+
+      processed += rows.length;
+      updated += updates.length;
+      console.log(`[compute-txn] Batch: ${processed} processed, ${updated} updated (${Math.round((Date.now() - startTime) / 1000)}s)`);
+
+      if (rows.length < batchSize) break;
+      // Don't increment offset — we're filtering by last_txn_price IS NULL, so processed rows won't appear again
+    }
+
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    res.json({ processed, updated, elapsed_seconds: elapsed });
+  } catch (err) {
+    console.error('Compute transactions error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/listings/sales — fallback sale/rent lookup ────────────────
 
 app.post('/api/listings/sales', async (req, res) => {
   try {
@@ -561,62 +606,52 @@ app.get('/api/kpis', async (req, res) => {
       .single();
     const latestDate = latestRow?.date_listed;
 
-    // Run KPI queries: fetch top 20 candidates + community + dips count
-    const [candidatesResult, commResult, dipsResult] = await Promise.all([
-      // Top 20 candidates by dip_pct TODAY (we'll compute transaction % from these)
+    // Run all 4 KPI queries in parallel — use pre-computed last_txn_* columns
+    const [pctResult, aedResult, commResult, dipsResult] = await Promise.all([
+      // Highest % drop TODAY (by transaction %)
       (() => {
-        let q = supabase.from(TABLE).select('id, dip_pct, dip_price, property_name, community, bedrooms, size_sqft, purpose, price_aed')
+        let q = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
           .eq('is_valid', true).eq('date_listed', latestDate || '')
-          .not('dip_pct', 'is', null).lt('dip_pct', 0)
-          .order('dip_pct', { ascending: true }).limit(20);
+          .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
+          .order('last_txn_change_pct', { ascending: true }).limit(1);
+        q = applyFilters(q, req.query);
+        return q;
+      })(),
+      // Highest AED drop TODAY (by transaction AED)
+      (() => {
+        let q = supabase.from(TABLE).select('id, last_txn_change, property_name, community')
+          .eq('is_valid', true).eq('date_listed', latestDate || '')
+          .not('last_txn_change', 'is', null).lt('last_txn_change', 0)
+          .order('last_txn_change', { ascending: true }).limit(1);
         q = applyFilters(q, req.query);
         return q;
       })(),
       // Community with most drops
       supabase.from(TABLE).select('community')
-        .eq('is_valid', true).not('dip_pct', 'is', null).lt('dip_pct', 0)
+        .eq('is_valid', true).not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
         .limit(10000),
       // Dips in last 24h
       (() => {
         let q = supabase.from(TABLE).select('id', { count: 'exact', head: true })
           .eq('is_valid', true).eq('date_listed', latestDate || '')
-          .not('dip_pct', 'is', null).lt('dip_pct', 0);
+          .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0);
         q = applyFilters(q, req.query);
         return q;
       })(),
     ]);
 
-    // Compute transaction-based % for candidates
-    const candidates = candidatesResult.data || [];
-    let txnCandidates = [];
-    if (candidates.length > 0) {
-      const saleMap = await fetchLastSales(candidates);
-      txnCandidates = candidates.map(c => {
-        const sale = saleMap[c.id];
-        const txnPct = sale ? Math.round(((c.price_aed - sale.sale_price) / sale.sale_price) * 1000) / 10 : null;
-        const txnAed = sale ? c.price_aed - sale.sale_price : null;
-        return { ...c, txn_pct: txnPct, txn_aed: txnAed };
-      });
-    }
-
-    // Pick biggest negative transaction % (fallback to dip_pct)
-    const pctSorted = txnCandidates.filter(c => c.txn_pct != null && c.txn_pct < 0).sort((a, b) => a.txn_pct - b.txn_pct);
-    const highestPctRow = pctSorted[0] || candidates[0];
-    const highestPct = highestPctRow ? {
-      listing_id: highestPctRow.id,
-      change_pct: highestPctRow.txn_pct ?? Math.round(highestPctRow.dip_pct * 10) / 10,
-      property_name: highestPctRow.property_name,
-      community: highestPctRow.community,
+    const highestPct = pctResult.data?.[0] ? {
+      listing_id: pctResult.data[0].id,
+      change_pct: Math.round(pctResult.data[0].last_txn_change_pct * 10) / 10,
+      property_name: pctResult.data[0].property_name,
+      community: pctResult.data[0].community,
     } : null;
 
-    // Pick biggest negative transaction AED (fallback to dip_price)
-    const aedSorted = txnCandidates.filter(c => c.txn_aed != null && c.txn_aed < 0).sort((a, b) => a.txn_aed - b.txn_aed);
-    const highestAedRow = aedSorted[0] || candidates[0];
-    const highestAed = highestAedRow ? {
-      listing_id: highestAedRow.id,
-      change_aed: highestAedRow.txn_aed ?? highestAedRow.dip_price,
-      property_name: highestAedRow.property_name,
-      community: highestAedRow.community,
+    const highestAed = aedResult.data?.[0] ? {
+      listing_id: aedResult.data[0].id,
+      change_aed: aedResult.data[0].last_txn_change,
+      property_name: aedResult.data[0].property_name,
+      community: aedResult.data[0].community,
     } : null;
 
     // Process community counts
