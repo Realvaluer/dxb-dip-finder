@@ -22,7 +22,7 @@ app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
 
 // Sale/rent combo cache: key → { data, ts }
 const saleCache = new Map();
-const SALE_CACHE_TTL = 30 * 60 * 1000; // 30 min
+const SALE_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
 function getCachedSale(key) {
   const entry = saleCache.get(key);
@@ -360,11 +360,22 @@ app.get('/api/listings', async (req, res) => {
     const { data, count, error } = await query;
     if (error) throw error;
 
-    // Fetch ref data (fast — same DB), return listings immediately without waiting for sales
-    const refMap = await fetchRefData(data || []);
+    // Fetch ref data and sale data in parallel
+    const [refMap, saleMap] = await Promise.all([
+      fetchRefData(data || []),
+      fetchLastSales(data || []),
+    ]);
 
     res.json({
-      listings: (data || []).map(r => mapRow(r, refMap[r.dip_ref_id], null)),
+      listings: (data || []).map(r => {
+        const sale = saleMap[r.id];
+        const mapped = mapRow(r, refMap[r.dip_ref_id], sale ? { sale_price: sale.sale_price, sale_date: sale.sale_date, sale_size: sale.sale_size, sale_type: sale.sale_type } : null);
+        if (sale) {
+          const change = r.price_aed - sale.sale_price;
+          mapped.last_sale_change_pct = sale.sale_price ? Math.round((change / sale.sale_price) * 1000) / 10 : null;
+        }
+        return mapped;
+      }),
       total: count || 0,
     });
   } catch (err) {
