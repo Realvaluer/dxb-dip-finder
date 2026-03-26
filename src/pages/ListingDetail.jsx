@@ -89,18 +89,31 @@ export default function ListingDetail() {
 
         {/* Property detail tags */}
         <div className="flex flex-wrap gap-2">
-          {[
-            (l.bedrooms === 0 || l.bedrooms === null) ? 'Studio' : `${l.bedrooms} Beds`,
-            l.size_sqft ? `${l.size_sqft.toLocaleString()} sqft` : null,
-            l.furnished,
-            aedPerSqft ? `AED ${aedPerSqft.toLocaleString()}/sqft` : null,
-            l.bathrooms != null ? `${l.bathrooms} Baths` : null,
-            l.ready_off_plan === 'ready' || l.ready_off_plan === 'Ready' ? 'Ready' : l.ready_off_plan === 'off_plan' ? 'Off Plan' : l.ready_off_plan || null,
-            l.type || null,
-            l.purpose?.toLowerCase() === 'sale' ? 'Sale' : l.purpose?.toLowerCase() === 'rent' ? 'Rent' : null,
-          ].filter(Boolean).map(chip => (
-            <span key={chip} className="bg-card border border-border rounded-lg px-3 py-1.5 text-xs">{chip}</span>
-          ))}
+          {(() => {
+            const readyLabel = l.ready_off_plan === 'ready' || l.ready_off_plan === 'Ready' ? 'Ready'
+              : (l.ready_off_plan === 'off_plan' || l.ready_off_plan === 'Off Plan') ? 'Off Plan'
+              : l.ready_off_plan || null;
+            const isReady = readyLabel === 'Ready';
+            const chips = [
+              (l.bedrooms === 0 || l.bedrooms === null) ? 'Studio' : `${l.bedrooms} Beds`,
+              l.size_sqft ? `${l.size_sqft.toLocaleString()} sqft` : null,
+              l.furnished,
+              aedPerSqft ? `AED ${aedPerSqft.toLocaleString()}/sqft` : null,
+              l.bathrooms != null ? `${l.bathrooms} Baths` : null,
+              l.type || null,
+              l.purpose?.toLowerCase() === 'sale' ? 'Sale' : l.purpose?.toLowerCase() === 'rent' ? 'Rent' : null,
+            ].filter(Boolean);
+            return (
+              <>
+                {readyLabel && (
+                  <span className={`rounded-lg px-3 py-1.5 text-xs font-medium ${isReady ? 'bg-accent/20 border border-accent/40 text-accent' : 'bg-amber-900/30 border border-amber-500/40 text-amber-300'}`}>{readyLabel}</span>
+                )}
+                {chips.map(chip => (
+                  <span key={chip} className="bg-card border border-border rounded-lg px-3 py-1.5 text-xs">{chip}</span>
+                ))}
+              </>
+            );
+          })()}
         </div>
 
         <div className="border-t border-border" />

@@ -83,13 +83,13 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
       {/* Line 1: Previous Listing */}
       {hasPrevListing && (
         <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
-          <span className="font-semibold text-white">Previous Listing:</span>{' '}
+          <span className="font-semibold text-white">Prev Listing:</span>{' '}
           <span className={prevIsNeg ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
             {prevIsNeg ? '−' : '+'}{formatPrice(Math.abs(l.change_aed))}
           </span>
           {l.previous_price != null && <> · {formatPrice(l.previous_price)}</>}
-          {l.dip_prev_size != null && <> · {Number(l.dip_prev_size).toLocaleString()} sqft</>}
-          {l.price_changed_at && <> · {formatDate(l.price_changed_at)}</>}
+          {l.dip_prev_size != null && <> · {Math.round(Number(l.dip_prev_size)).toLocaleString()} sqft</>}
+          {l.price_changed_at && <> · {formatDate(l.price_changed_at, true)}</>}
         </div>
       )}
 
@@ -101,9 +101,8 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
             {saleIsNeg ? '−' : '+'}{formatPrice(Math.abs(l.last_sale_change))}
           </span>
           {' '}· {formatPrice(l.last_sale_price)}
-          {l.last_sale_size != null && <> · {Number(l.last_sale_size).toLocaleString()} sqft</>}
-          {l.last_sale_date && <> · {formatDate(l.last_sale_date)}</>}
-          <span className="text-muted/60"> (DLD via RealValuer.AI)</span>
+          {l.last_sale_size != null && <> · {Math.round(Number(l.last_sale_size)).toLocaleString()} sqft</>}
+          {l.last_sale_date && <> · {formatDate(l.last_sale_date, true)}</>}
         </div>
       )}
 

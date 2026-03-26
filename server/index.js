@@ -347,15 +347,24 @@ app.get('/api/listings', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = parseInt(req.query.offset, 10) || 0;
+    const sort = req.query.sort;
+    const isTxnSort = sort === 'dip_pct' || sort === 'dip_aed';
 
     let query = supabase
       .from(TABLE)
       .select(LISTING_SELECT, { count: 'exact' })
-      .eq('is_valid', true)
-      .range(offset, offset + limit - 1);
+      .eq('is_valid', true);
 
     query = applyFilters(query, req.query);
-    query = applySort(query, req.query.sort);
+
+    if (isTxnSort) {
+      // For transaction sorts: fetch larger batch, compute txn %, re-sort client-side
+      query = query.order(sort === 'dip_pct' ? 'dip_pct' : 'dip_price', { ascending: true, nullsFirst: false })
+        .range(0, Math.max(offset + limit * 3, 200) - 1);
+    } else {
+      query = applySort(query, sort);
+      query = query.range(offset, offset + limit - 1);
+    }
 
     const { data, count, error } = await query;
     if (error) throw error;
@@ -366,18 +375,30 @@ app.get('/api/listings', async (req, res) => {
       fetchLastSales(data || []),
     ]);
 
-    res.json({
-      listings: (data || []).map(r => {
-        const sale = saleMap[r.id];
-        const mapped = mapRow(r, refMap[r.dip_ref_id], sale ? { sale_price: sale.sale_price, sale_date: sale.sale_date, sale_size: sale.sale_size, sale_type: sale.sale_type } : null);
-        if (sale) {
-          const change = r.price_aed - sale.sale_price;
-          mapped.last_sale_change_pct = sale.sale_price ? Math.round((change / sale.sale_price) * 1000) / 10 : null;
-        }
-        return mapped;
-      }),
-      total: count || 0,
+    let listings = (data || []).map(r => {
+      const sale = saleMap[r.id];
+      const mapped = mapRow(r, refMap[r.dip_ref_id], sale ? { sale_price: sale.sale_price, sale_date: sale.sale_date, sale_size: sale.sale_size, sale_type: sale.sale_type } : null);
+      if (sale) {
+        const change = r.price_aed - sale.sale_price;
+        mapped.last_sale_change_pct = sale.sale_price ? Math.round((change / sale.sale_price) * 1000) / 10 : null;
+      }
+      return mapped;
     });
+
+    // Re-sort by transaction data if needed
+    if (isTxnSort) {
+      const field = sort === 'dip_pct' ? 'last_sale_change_pct' : 'last_sale_change';
+      listings.sort((a, b) => {
+        const av = a[field], bv = b[field];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        return av - bv; // ascending = most negative first
+      });
+      listings = listings.slice(offset, offset + limit);
+    }
+
+    res.json({ listings, total: count || 0 });
   } catch (err) {
     console.error('Listings error:', err);
     res.status(500).json({ error: 'Failed to fetch listings' });

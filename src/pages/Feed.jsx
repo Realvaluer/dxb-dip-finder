@@ -16,9 +16,9 @@ import { SkeletonCards } from '../components/Skeleton';
 
 const SORT_OPTIONS = [
   { value: 'newest', label: '↓ Most recent' },
-  { value: 'dip_pct', label: '↓ Listing vs Transaction %' },
-  { value: 'dip_aed', label: '↓ Listing vs Transaction AED' },
-  { value: 'listing_change', label: '↓ Same listing change' },
+  { value: 'dip_pct', label: '↓ vs Transaction %' },
+  { value: 'dip_aed', label: '↓ vs Transaction AED' },
+  { value: 'listing_change', label: '↓ Same listing' },
   { value: 'price_asc', label: '↑ Price low–high' },
   { value: 'price_desc', label: '↓ Price high–low' },
 ];
@@ -285,14 +285,14 @@ export default function Feed() {
             <select
               value={filters.sort}
               onChange={e => setFilter('sort', e.target.value)}
-              className="flex-1 bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-white outline-none min-h-[44px] appearance-none"
+              className="flex-1 bg-card border border-border rounded-xl px-2.5 py-2 text-[11px] text-white outline-none min-h-[36px] appearance-none"
             >
               {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
             <select
               value={filters.purpose}
               onChange={e => setFilter('purpose', e.target.value)}
-              className="flex-1 bg-card border border-border rounded-xl px-3 py-2.5 text-xs text-white outline-none min-h-[44px] appearance-none"
+              className="flex-1 bg-card border border-border rounded-xl px-2.5 py-2 text-[11px] text-white outline-none min-h-[36px] appearance-none"
             >
               {PURPOSE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
