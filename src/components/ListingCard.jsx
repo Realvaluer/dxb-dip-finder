@@ -11,22 +11,14 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const isIncrease = displayPct != null && displayPct > 0;
   const absChangePct = displayPct != null ? Math.abs(displayPct).toFixed(1) : null;
 
-  // Listing vs listing data (for the footer row)
-  const lvlDecrease = l.change_pct != null && l.change_pct < 0;
-  const lvlIncrease = l.change_pct != null && l.change_pct > 0;
-  const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
-  const hasChange = lvlDecrease || lvlIncrease;
+  // Previous Listing (dip data)
+  const hasPrevListing = l.change_aed != null && l.change_aed !== 0;
+  const prevIsNeg = hasPrevListing && l.change_aed < 0;
 
-  // Same-listing price change
-  const hasSameListingChange = l.listing_change != null && l.listing_change !== 0;
-  const sameDecrease = hasSameListingChange && l.listing_change < 0;
-  const sameIncrease = hasSameListingChange && l.listing_change > 0;
-
-  // Listing vs Last Sale
+  // Last Sale/Rent (transaction data)
   const hasLastSale = l.last_sale_price != null;
-  const saleChange = l.last_sale_change;
-  const saleDecrease = hasLastSale && saleChange != null && saleChange < 0;
-  const saleIncrease = hasLastSale && saleChange != null && saleChange > 0;
+  const saleIsNeg = hasLastSale && l.last_sale_change != null && l.last_sale_change < 0;
+  const hasAnyComparison = hasPrevListing || hasLastSale;
 
   function handleBookmark(e) {
     e.stopPropagation();
@@ -88,47 +80,30 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
         <span className="ml-auto text-[10px] font-mono text-muted">{sourceTag(l.source)}</span>
       </div>
 
-      {/* Row 5: same-listing price change */}
-      {hasSameListingChange && (
+      {/* Line 1: Previous Listing */}
+      {hasPrevListing && (
         <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
-          <span className="font-semibold text-white">Same Listing:</span>{' '}
-          <span className={sameDecrease ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
-            {sameDecrease ? '−' : '+'}{formatPrice(Math.abs(l.listing_change))}
+          <span className="font-semibold text-white">Previous Listing:</span>{' '}
+          <span className={prevIsNeg ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
+            {prevIsNeg ? '−' : '+'}{formatPrice(Math.abs(l.change_aed))}
           </span>
-          {l.listing_change_prev_price != null && (
-            <> vs prev. {formatPrice(l.listing_change_prev_price)}</>
-          )}
+          {l.previous_price != null && <> · {formatPrice(l.previous_price)}</>}
+          {l.dip_prev_size != null && <> · {Number(l.dip_prev_size).toLocaleString()} sqft</>}
+          {l.price_changed_at && <> · {formatDate(l.price_changed_at)}</>}
         </div>
       )}
 
-      {/* Row 5b: cross-listing price change */}
-      {lvlDecrease && (
-        <div className={`${hasSameListingChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
-          <span className="font-semibold text-white">Listing vs. Listing:</span>{' '}
-          <span className="text-dip-red font-medium">−{formatPrice(absChangeAed)}</span>
-          {' '}vs prev. {formatPrice(l.previous_price)} · {formatDate(l.price_changed_at)}
-        </div>
-      )}
-      {lvlIncrease && (
-        <div className={`${hasSameListingChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
-          <span className="font-semibold text-white">Listing vs. Listing:</span>{' '}
-          <span className="text-accent font-medium">+{formatPrice(absChangeAed)}</span>
-          {' '}vs prev. {formatPrice(l.previous_price)} · {formatDate(l.price_changed_at)}
-        </div>
-      )}
-
-      {/* Row 5c: Listing vs Last Sale */}
+      {/* Line 2: Last Sale/Rent */}
       {hasLastSale && (
-        <div className={`${hasSameListingChange || hasChange ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
-          <span className="font-semibold text-white">{l.purpose?.toLowerCase() === 'rent' ? 'Listing vs. Last Rent:' : 'Listing vs. Last Sale:'}</span>{' '}
-          {saleDecrease ? (
-            <span className="text-dip-red font-medium">−{formatPrice(Math.abs(saleChange))}</span>
-          ) : saleIncrease ? (
-            <span className="text-accent font-medium">+{formatPrice(saleChange)}</span>
-          ) : (
-            <span className="font-medium">No change</span>
-          )}
-          {' '}vs {l.purpose?.toLowerCase() === 'rent' ? 'rent' : 'sale'} {formatPrice(l.last_sale_price)} · {formatDate(l.last_sale_date)}
+        <div className={`${hasPrevListing ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
+          <span className="font-semibold text-white">{l.purpose?.toLowerCase() === 'rent' ? 'Last Rent:' : 'Last Sale:'}</span>{' '}
+          <span className={saleIsNeg ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
+            {saleIsNeg ? '−' : '+'}{formatPrice(Math.abs(l.last_sale_change))}
+          </span>
+          {' '}· {formatPrice(l.last_sale_price)}
+          {l.last_sale_size != null && <> · {Number(l.last_sale_size).toLocaleString()} sqft</>}
+          {l.last_sale_date && <> · {formatDate(l.last_sale_date)}</>}
+          <span className="text-muted/60"> (DLD via RealValuer.AI)</span>
         </div>
       )}
 
@@ -139,7 +114,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleViewLink}
-          className={`${hasChange || hasSameListingChange || hasLastSale ? '' : 'mt-2 pt-2 border-t border-border '}text-[11px] text-accent flex items-center gap-1 hover:underline ${hasChange || hasSameListingChange || hasLastSale ? 'mt-1' : ''}`}
+          className={`${hasAnyComparison ? '' : 'mt-2 pt-2 border-t border-border '}text-[11px] text-accent flex items-center gap-1 hover:underline ${hasAnyComparison ? 'mt-1' : ''}`}
         >
           → View on {l.source}
         </a>

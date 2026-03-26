@@ -330,7 +330,7 @@ function applySort(query, sort) {
     case 'dip_aed':
       return query.order('dip_price', { ascending: true, nullsFirst: false });
     case 'listing_change':
-      return query.not('listing_change', 'is', null).neq('listing_change', 0).order('listing_change', { ascending: true, nullsFirst: false });
+      return query.order('listing_change', { ascending: true, nullsFirst: false });
     case 'price_asc':
       return query.order('price_aed', { ascending: true });
     case 'price_desc':
@@ -502,7 +502,12 @@ app.get('/api/listings/:id', async (req, res) => {
 
     // Fetch last sale for this listing
     const saleMap = await fetchLastSales([row]);
-    const mapped = mapRow(row, refData, saleMap[row.id]);
+    const sale = saleMap[row.id];
+    const mapped = mapRow(row, refData, sale ? { sale_price: sale.sale_price, sale_date: sale.sale_date, sale_size: sale.sale_size, sale_type: sale.sale_type } : null);
+    if (sale) {
+      const change = row.price_aed - sale.sale_price;
+      mapped.last_sale_change_pct = sale.sale_price ? Math.round((change / sale.sale_price) * 1000) / 10 : null;
+    }
     res.json({
       ...mapped,
       price_history: edits || [],
@@ -535,31 +540,22 @@ app.get('/api/kpis', async (req, res) => {
       .single();
     const latestDate = latestRow?.date_listed;
 
-    // Run all 4 KPI queries in parallel
-    const [pctResult, aedResult, commResult, dipsResult] = await Promise.all([
-      // 1. Highest % drop TODAY
+    // Run KPI queries: fetch top 20 candidates + community + dips count
+    const [candidatesResult, commResult, dipsResult] = await Promise.all([
+      // Top 20 candidates by dip_pct TODAY (we'll compute transaction % from these)
       (() => {
-        let q = supabase.from(TABLE).select('id, dip_pct, property_name, community')
+        let q = supabase.from(TABLE).select('id, dip_pct, dip_price, property_name, community, bedrooms, size_sqft, purpose, price_aed')
           .eq('is_valid', true).eq('date_listed', latestDate || '')
           .not('dip_pct', 'is', null).lt('dip_pct', 0)
-          .order('dip_pct', { ascending: true }).limit(1);
+          .order('dip_pct', { ascending: true }).limit(20);
         q = applyFilters(q, req.query);
         return q;
       })(),
-      // 2. Highest AED drop TODAY
-      (() => {
-        let q = supabase.from(TABLE).select('id, dip_price, property_name, community')
-          .eq('is_valid', true).eq('date_listed', latestDate || '')
-          .not('dip_price', 'is', null).lt('dip_price', 0)
-          .order('dip_price', { ascending: true }).limit(1);
-        q = applyFilters(q, req.query);
-        return q;
-      })(),
-      // 3. Community with most drops — single query (limit 10000)
+      // Community with most drops
       supabase.from(TABLE).select('community')
         .eq('is_valid', true).not('dip_pct', 'is', null).lt('dip_pct', 0)
         .limit(10000),
-      // 4. Dips in last 24h
+      // Dips in last 24h
       (() => {
         let q = supabase.from(TABLE).select('id', { count: 'exact', head: true })
           .eq('is_valid', true).eq('date_listed', latestDate || '')
@@ -569,6 +565,39 @@ app.get('/api/kpis', async (req, res) => {
       })(),
     ]);
 
+    // Compute transaction-based % for candidates
+    const candidates = candidatesResult.data || [];
+    let txnCandidates = [];
+    if (candidates.length > 0) {
+      const saleMap = await fetchLastSales(candidates);
+      txnCandidates = candidates.map(c => {
+        const sale = saleMap[c.id];
+        const txnPct = sale ? Math.round(((c.price_aed - sale.sale_price) / sale.sale_price) * 1000) / 10 : null;
+        const txnAed = sale ? c.price_aed - sale.sale_price : null;
+        return { ...c, txn_pct: txnPct, txn_aed: txnAed };
+      });
+    }
+
+    // Pick biggest negative transaction % (fallback to dip_pct)
+    const pctSorted = txnCandidates.filter(c => c.txn_pct != null && c.txn_pct < 0).sort((a, b) => a.txn_pct - b.txn_pct);
+    const highestPctRow = pctSorted[0] || candidates[0];
+    const highestPct = highestPctRow ? {
+      listing_id: highestPctRow.id,
+      change_pct: highestPctRow.txn_pct ?? Math.round(highestPctRow.dip_pct * 10) / 10,
+      property_name: highestPctRow.property_name,
+      community: highestPctRow.community,
+    } : null;
+
+    // Pick biggest negative transaction AED (fallback to dip_price)
+    const aedSorted = txnCandidates.filter(c => c.txn_aed != null && c.txn_aed < 0).sort((a, b) => a.txn_aed - b.txn_aed);
+    const highestAedRow = aedSorted[0] || candidates[0];
+    const highestAed = highestAedRow ? {
+      listing_id: highestAedRow.id,
+      change_aed: highestAedRow.txn_aed ?? highestAedRow.dip_price,
+      property_name: highestAedRow.property_name,
+      community: highestAedRow.community,
+    } : null;
+
     // Process community counts
     let mostDrops = null;
     if (commResult.data?.length) {
@@ -577,20 +606,6 @@ app.get('/api/kpis', async (req, res) => {
       const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
       if (top) mostDrops = { community: top[0], count: top[1] };
     }
-
-    const highestPct = pctResult.data?.[0] ? {
-      listing_id: pctResult.data[0].id,
-      change_pct: Math.round(pctResult.data[0].dip_pct * 10) / 10,
-      property_name: pctResult.data[0].property_name,
-      community: pctResult.data[0].community,
-    } : null;
-
-    const highestAed = aedResult.data?.[0] ? {
-      listing_id: aedResult.data[0].id,
-      change_aed: aedResult.data[0].dip_price,
-      property_name: aedResult.data[0].property_name,
-      community: aedResult.data[0].community,
-    } : null;
 
     const result = {
       highest_dip_pct: highestPct,

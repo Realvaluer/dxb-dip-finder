@@ -37,18 +37,17 @@ export default function ListingDetail() {
   const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
   const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
   const aedPerSqft = l.size_sqft ? Math.round(l.price_aed / l.size_sqft) : null;
-  const barWidth = hasChange && l.previous_price ? Math.min(Math.round((l.price_aed / l.previous_price) * 100), 100) : 0;
 
   // Same-listing price change
   const hasSameListingChange = l.listing_change != null && l.listing_change !== 0;
   const sameDecrease = hasSameListingChange && l.listing_change < 0;
-  const sameIncrease = hasSameListingChange && l.listing_change > 0;
 
   // Listing vs Last Sale
   const hasLastSale = l.last_sale_price != null;
   const saleChange = l.last_sale_change;
   const saleDecrease = hasLastSale && saleChange != null && saleChange < 0;
-  const saleIncrease = hasLastSale && saleChange != null && saleChange > 0;
+
+  const linkStyle = "flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-3 text-accent text-sm font-medium min-h-[44px]";
 
   return (
     <div className="min-h-screen bg-bg pb-8">
@@ -88,13 +87,17 @@ export default function ListingDetail() {
           )}
         </div>
 
-        {/* Metadata chips */}
+        {/* Property detail tags */}
         <div className="flex flex-wrap gap-2">
           {[
             (l.bedrooms === 0 || l.bedrooms === null) ? 'Studio' : `${l.bedrooms} Beds`,
             l.size_sqft ? `${l.size_sqft.toLocaleString()} sqft` : null,
             l.furnished,
             aedPerSqft ? `AED ${aedPerSqft.toLocaleString()}/sqft` : null,
+            l.bathrooms != null ? `${l.bathrooms} Baths` : null,
+            l.ready_off_plan === 'ready' || l.ready_off_plan === 'Ready' ? 'Ready' : l.ready_off_plan === 'off_plan' ? 'Off Plan' : l.ready_off_plan || null,
+            l.type || null,
+            l.purpose?.toLowerCase() === 'sale' ? 'Sale' : l.purpose?.toLowerCase() === 'rent' ? 'Rent' : null,
           ].filter(Boolean).map(chip => (
             <span key={chip} className="bg-card border border-border rounded-lg px-3 py-1.5 text-xs">{chip}</span>
           ))}
@@ -108,10 +111,6 @@ export default function ListingDetail() {
             <div>
               <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Same listing change</div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Current price</div>
-                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.price_aed)}</div>
-                </div>
                 <div className="bg-card rounded-xl p-3">
                   <div className="text-[10px] text-muted">Previous price</div>
                   <div className="text-sm font-bold mt-0.5">{formatPrice(l.listing_change_prev_price)}</div>
@@ -135,10 +134,6 @@ export default function ListingDetail() {
               <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Listing vs. listing</div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Current price</div>
-                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.price_aed)}</div>
-                </div>
-                <div className="bg-card rounded-xl p-3">
                   <div className="text-[10px] text-muted">Previous price</div>
                   <div className="text-sm font-bold mt-0.5">{formatPrice(l.previous_price)}</div>
                 </div>
@@ -154,35 +149,17 @@ export default function ListingDetail() {
                 </div>
               </div>
 
-              {/* Visual bar */}
-              <div className="mt-3 space-y-1">
-                <div className="h-6 rounded-lg bg-blue-900/30 relative overflow-hidden">
-                  <div className={`h-full rounded-lg ${isDecrease ? 'bg-dip-red/40' : 'bg-accent/40'}`} style={{ width: `${barWidth}%` }} />
-                  {isIncrease && (
-                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-accent font-bold">+</span>
-                  )}
-                </div>
-                <div className="flex justify-between text-[10px] text-muted">
-                  <span>AED 0</span>
-                  <span>Now: {formatPrice(l.price_aed)}</span>
-                  <span>Prev: {formatPrice(l.previous_price)}</span>
-                </div>
-              </div>
-
               {/* Comparison listing links */}
               {(l.previous_url || l.comparison?.url) && (
                 <div className="mt-3 space-y-2">
                   {l.previous_url && (
-                    <a href={l.previous_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-accent text-xs hover:underline">
+                    <a href={l.previous_url} target="_blank" rel="noopener noreferrer" className={linkStyle}>
                       → View previous listing{l.comparison?.source ? ` on ${l.comparison.source}` : ''}
                     </a>
                   )}
                   {l.comparison?.url && l.comparison.url !== l.previous_url && (
-                    <a href={l.comparison.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-accent text-xs hover:underline">
+                    <a href={l.comparison.url} target="_blank" rel="noopener noreferrer" className={linkStyle}>
                       → View compared listing{l.comparison.source ? ` on ${l.comparison.source}` : ''}
-                      {l.comparison.property_name ? ` (${l.comparison.property_name})` : ''}
                     </a>
                   )}
                 </div>
@@ -237,10 +214,6 @@ export default function ListingDetail() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Listing price</div>
-                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.price_aed)}</div>
-                </div>
-                <div className="bg-card rounded-xl p-3">
                   <div className="text-[10px] text-muted">{l.purpose?.toLowerCase() === 'rent' ? 'Last rent' : 'Last DLD sale'}</div>
                   <div className="text-sm font-bold mt-0.5">{formatPrice(l.last_sale_price)}</div>
                 </div>
@@ -254,12 +227,23 @@ export default function ListingDetail() {
                   <div className="text-[10px] text-muted">{l.purpose?.toLowerCase() === 'rent' ? 'Rent date' : 'Sale date'}</div>
                   <div className="text-sm font-bold mt-0.5">{formatDate(l.last_sale_date)}</div>
                 </div>
+                {l.last_sale_size != null && (
+                  <div className="bg-card rounded-xl p-3">
+                    <div className="text-[10px] text-muted">Transaction size</div>
+                    <div className="text-sm font-bold mt-0.5">{l.last_sale_size.toLocaleString()} sqft</div>
+                  </div>
+                )}
               </div>
               {l.last_sale_type && (
                 <div className="mt-2 text-[11px] text-muted">
-                  {l.purpose?.toLowerCase() === 'rent' ? 'Source:' : 'Transaction:'} {l.last_sale_type} {l.last_sale_size ? `· ${l.last_sale_size.toLocaleString()} sqft` : ''}
+                  {l.purpose?.toLowerCase() === 'rent' ? 'Source:' : 'Transaction:'} {l.last_sale_type}
                 </div>
               )}
+              <div className="mt-3">
+                <a href="https://data.realvaluer.ai" target="_blank" rel="noopener noreferrer" className={linkStyle}>
+                  → View DLD Transactions via Data.RealValuer.ai
+                </a>
+              </div>
             </div>
             <div className="border-t border-border" />
           </>
@@ -268,32 +252,22 @@ export default function ListingDetail() {
         {/* Property details */}
         <div>
           <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Property details</div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              ['Bathrooms', l.bathrooms],
-              ['Furnished', l.furnished],
-              ['Ready / Off-plan', l.ready_off_plan === 'ready' ? 'Ready' : l.ready_off_plan === 'off_plan' ? 'Off Plan' : l.ready_off_plan],
-              l.distress ? ['Distress', l.distress] : null,
-              ['Broker / Agency', l.broker_agency],
-              ['Reference no', l.reference_no],
-            ].filter(Boolean).map(([label, val]) => (
-              <div key={label} className="bg-card rounded-xl p-3">
-                <div className="text-[10px] text-muted">{label}</div>
-                <div className="text-xs font-medium mt-0.5 truncate">{val || '—'}</div>
-              </div>
-            ))}
-          </div>
+          {(l.broker_agency || l.reference_no) && (
+            <div className="space-y-1.5 mb-3">
+              {l.broker_agency && (
+                <div className="text-xs"><span className="text-muted">Broker / Agency:</span> <span className="font-medium">{l.broker_agency}</span></div>
+              )}
+              {l.reference_no && (
+                <div className="text-xs"><span className="text-muted">Reference no:</span> <span className="font-medium">{l.reference_no}</span></div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* External link */}
         {l.url && (
-          <a
-            href={l.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-3 text-accent text-sm font-medium min-h-[44px]"
-          >
-            <span>→ View on {l.source}</span>
+          <a href={l.url} target="_blank" rel="noopener noreferrer" className={linkStyle}>
+            → View on {l.source}
           </a>
         )}
       </div>
