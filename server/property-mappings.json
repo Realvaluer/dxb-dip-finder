@@ -1,0 +1,46 @@
+{
+  "_description": "Mappings between DDF (scraper) property/community names and RV (RealValuer DLD) names. Used for matching listings to transactions.",
+  "_updated": "2026-03-26",
+
+  "community_aliases": {
+    "_description": "When DDF has community X, also search RV community Y",
+    "dubai south": ["azizi venice", "dubai south"],
+    "downtown dubai": ["downtown dubai", "business bay"],
+    "za'abeel": ["zaabeel first", "zaabeel second", "zaabeel"]
+  },
+
+  "property_name_mappings": {
+    "_description": "DDF name → RV name (when fuzzy matching alone won't work)",
+    "Binghatti Ghost": "ghost by binghatti",
+    "Bugatti Residences by Binghatti": "bugatti residences",
+    "Elitz 3 by Danube": "elitz 3 by danube",
+    "Elitz 3": "elitz 3 by danube",
+    "Six Senses Hotel": "six senses residences",
+    "SLS Dubai Hotel & Residences": "sls dubai hotel & residences"
+  },
+
+  "confirmed_matches": {
+    "_description": "Buildings confirmed by user to match between DDF and RV",
+    "DT1": { "rv_name": "dt 1 downtown", "rv_community": "downtown dubai" },
+    "Marina Gate 1": { "rv_name": "the residences at marina gate 1", "rv_community": "dubai marina" },
+    "Residence 110": { "rv_name": "residence 110", "rv_community": "business bay" },
+    "One Za'abeel": { "rv_names": ["one zaabeel the residences", "one zaabeel tower", "one zabeel"], "rv_community": "zaabeel first" },
+    "Binghatti Ghost": { "rv_name": "ghost by binghatti", "rv_community": "al jaddaf" },
+    "The Cape": { "rv_name": "the cape building 1", "rv_community": "al barari", "note": "DDF has wrong community 'Dubai Harbour'" },
+    "Samana Skyros": { "rv_name": "samana skyros", "rv_community": "arjan" },
+    "Elitz 3": { "rv_names": ["elitz 3 by danube - tower 1", "elitz 3 by danube - tower 2"], "rv_community": "jumeirah village circle" },
+    "Bugatti Residences": { "rv_name": "bugatti residences", "rv_community": "business bay" },
+    "Azizi Venice": { "rv_name": "azizi venice", "rv_community": "azizi venice", "note": "DDF community 'Dubai South' = RV community 'Azizi Venice'" },
+    "SLS Dubai Hotel & Residences": { "rv_name": "sls dubai hotel & residences", "rv_community": "business bay", "note": "DDF has community 'Downtown Dubai' but RV has 'Business Bay'" },
+    "W Residences": { "note": "Multiple W Residences projects — match by community" },
+    "Six Senses": { "rv_names": ["six senses residences the palm", "six senses residences dubai marina"], "note": "Match by community" },
+    "Five Palm Jumeirah": { "rv_name": "five palm jumeirah", "rv_community": "palm jumeirah" },
+    "Seventh Heaven": { "rv_name": "seventh heaven", "rv_community": "al barari" }
+  },
+
+  "no_rv_data": {
+    "_description": "Buildings with no DLD transactions in RV (usually too new / off-plan)",
+    "Zazen One": "No sales in RV. JVT has no sales data.",
+    "Zazen Ivy": "No sales in RV."
+  }
+}
