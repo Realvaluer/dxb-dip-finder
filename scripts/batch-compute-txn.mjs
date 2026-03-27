@@ -52,8 +52,10 @@ const COMMUNITY_ALIASES = {
   'dubailand': ['dubailand', 'dubai land'],
 
   // Name mismatches between DDF and RV
+  'mohammed bin rashid city': ['district one', 'district seven', 'district eleven', 'sobha hartland', 'mohammed bin rashid city', 'meydan', 'meydan one'],
+  'nad al sheba': ['nad al shiba first', 'nad al sheba'],
   'al sufouh': ['al sufouh first', 'al sufouh'],
-  'al jaddaf': ['al jaddaf', 'culture village', 'jaddaf waterfront'],
+  'al jaddaf': ['al jadaf', 'al jaddaf', 'culture village', 'jaddaf waterfront'],
   'arabian ranches': ['arabian ranches'],
   'arabian ranches 3': ['arabian ranches phase 3', 'arabian ranches'],
   'meydan': ['meydan one', 'meydan city', 'meydan'],
@@ -76,6 +78,11 @@ const COMMUNITY_ALIASES = {
   'dubai marina': ['dubai marina'],
   'business bay': ['business bay'],
   'al barari': ['al barari'],
+  'al satwa': ['al satwa', 'jumeirah garden city'],
+  'mina rashid': ['mina rashid', 'al mina'],
+  'dubai south': ['dubai south', 'azizi venice', 'emaar south'],
+  'dubai south (dubai world central)': ['dubai south', 'azizi venice', 'emaar south', 'dubai world central'],
+  'dubai production city (impz)': ['dubai production city', 'dubai production city (impz)', 'impz'],
 };
 
 function getRvCommunities(ddfCommunity) {
@@ -100,8 +107,36 @@ function nameTokens(name) {
   return normalizeName(name).split(/[\s\-]+/).filter(t => t.length > 0);
 }
 
+// Explicit name overrides: DDF name → RV search tokens
+const NAME_OVERRIDES = {
+  'the torch': 'torch tower',
+  'the address sky view tower 1': 'address residence sky',
+  'the address sky view tower 2': 'address residence sky',
+  'the address residences dubai opera tower 1': 'address residence dubai opera',
+  'the address residences dubai opera tower 2': 'address residence dubai opera',
+  'maple at dubai hills estate 1': 'maple townhouses 1',
+  'maple at dubai hills estate 2': 'maple townhouses 2',
+  'maple at dubai hills estate 3': 'maple townhouses 3',
+  'district one villas': 'district one',
+  'binghatti ghost': 'ghost by binghatti',
+  'sls dubai hotel & residences': 'sls dubai hotel',
+  'six senses hotel': 'six senses residences',
+  'ciel tower': 'ciel vignette collection',
+  'kempinski residences the creek': 'kempinski',
+  'stamn one': 'stamn one',
+  'passo by beyond': 'passo',
+  'peninsula four the plaza': 'peninsula four',
+  'baystar by vida': 'baystar by vida',
+};
+
 // Check if DDF name matches RV name using fuzzy token matching
 function namesMatch(ddfName, rvName) {
+  // Check explicit overrides first
+  const override = NAME_OVERRIDES[normalizeName(ddfName)];
+  if (override) {
+    const rvNorm = normalizeName(rvName);
+    if (rvNorm.includes(override) || override.includes(rvNorm)) return true;
+  }
   const ddfNorm = normalizeName(ddfName);
   const rvNorm = normalizeName(rvName);
 

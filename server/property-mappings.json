@@ -5,18 +5,45 @@
   "community_aliases": {
     "_description": "When DDF has community X, also search RV community Y",
     "dubai south": ["azizi venice", "dubai south"],
+    "dubai south (dubai world central)": ["azizi venice", "dubai south"],
     "downtown dubai": ["downtown dubai", "business bay"],
-    "za'abeel": ["zaabeel first", "zaabeel second", "zaabeel"]
+    "za'abeel": ["zaabeel first", "zaabeel second", "zaabeel"],
+    "zabeel": ["zaabeel first", "zaabeel second", "zaabeel"],
+    "al jaddaf": ["al jadaf", "al jaddaf"],
+    "mohammed bin rashid city": ["district one", "mohammed bin rashid city", "meydan"],
+    "nad al sheba": ["nad al shiba first", "nad al sheba"],
+    "jumeirah village circle (jvc)": ["jumeirah village circle"],
+    "jumeirah village triangle (jvt)": ["jumeirah village triangle"],
+    "jumeirah lake towers (jlt)": ["jumeirah lake towers"],
+    "jumeirah beach residence (jbr)": ["jumeirah beach residence"],
+    "dubai silicon oasis (dso)": ["dubai silicon oasis"],
+    "damac hills 2 (akoya by damac)": ["damac hills 2", "akoya"],
+    "dubai production city (impz)": ["dubai production city"],
+    "culture village (jaddaf waterfront)": ["culture village", "al jadaf"],
+    "dubai land": ["rukan", "villanova", "dubai land", "dubailand"],
+    "dubailand": ["rukan", "villanova", "dubai land", "dubailand"],
+    "barsha heights (tecom)": ["barsha heights", "tecom"]
   },
 
   "property_name_mappings": {
-    "_description": "DDF name → RV name (when fuzzy matching alone won't work)",
+    "_description": "DDF name → RV search pattern (when fuzzy matching alone won't work)",
     "Binghatti Ghost": "ghost by binghatti",
     "Bugatti Residences by Binghatti": "bugatti residences",
     "Elitz 3 by Danube": "elitz 3 by danube",
     "Elitz 3": "elitz 3 by danube",
     "Six Senses Hotel": "six senses residences",
-    "SLS Dubai Hotel & Residences": "sls dubai hotel & residences"
+    "SLS Dubai Hotel & Residences": "sls dubai hotel & residences",
+    "The Torch": "torch tower",
+    "The Address Sky View Tower 1": "address residence sky",
+    "The Address Sky View Tower 2": "address residence sky",
+    "The Address Residences Dubai Opera Tower 1": "address residence dubai opera",
+    "The Address Residences Dubai Opera Tower 2": "address residence dubai opera",
+    "Maple at Dubai Hills Estate 1": "maple townhouses 1",
+    "Maple at Dubai Hills Estate 2": "maple townhouses 2",
+    "Maple at Dubai Hills Estate 3": "maple townhouses 3",
+    "Nad Al Sheba Gardens 1": "nad al sheba gardens 1",
+    "Nad Al Sheba Gardens 2": "nad al sheba gardens 2",
+    "District One Villas": "district one"
   },
 
   "confirmed_matches": {
