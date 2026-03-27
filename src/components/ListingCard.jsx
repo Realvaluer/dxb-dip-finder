@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatPrice, sourceTag } from '../utils';
+import { trackClick } from '../lib/analytics';
 
 export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const navigate = useNavigate();
@@ -22,11 +23,13 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
 
   function handleBookmark(e) {
     e.stopPropagation();
+    trackClick('bookmark', { property_id: l.id });
     onToggleBookmark?.(l.id);
   }
 
   function handleViewLink(e) {
     e.stopPropagation();
+    trackClick('view_external', { source: l.source, property_id: l.id });
   }
 
   return (

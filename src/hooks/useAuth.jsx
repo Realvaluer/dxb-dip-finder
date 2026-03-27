@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { identifyUser } from '../lib/analytics';
 
 const AuthContext = createContext(null);
 const SESSION_KEY = 'dip_finder_session';
@@ -26,6 +27,7 @@ export function AuthProvider({ children }) {
     const session = { token, email, user_id: userId };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     setUser(session);
+    identifyUser(email);
     setAuthSheetOpen(false);
     // Execute pending action (e.g. save a listing)
     if (pendingAction) {

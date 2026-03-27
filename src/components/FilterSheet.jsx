@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { trackFilter } from '../lib/analytics';
 
 function Pill({ label, selected, onClick }) {
   return (
@@ -140,6 +141,7 @@ export default function FilterSheet({ open, onClose, filters, filterOptions }) {
   }
 
   function apply() {
+    trackFilter(localFilters);
     const params = buildFilterParams(localFilters);
     window.location.href = '/?' + params.toString();
   }

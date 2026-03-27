@@ -1,11 +1,13 @@
 import express from 'express';
 import helmet from 'helmet';
+import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { supabase, salesDb, usersDb } from './db.js';
 import { registerAuthRoutes, requireAuth } from './auth.js';
+import analyticsRouter from './routes/analytics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -14,6 +16,7 @@ const PORT = process.env.PORT || 3001;
 const TABLE = 'ddf_listings';
 
 app.use(helmet());
+app.use(cors({ origin: ['https://dxpdipfinder.com', 'https://admin.dxpdipfinder.com'] }));
 app.use(compression());
 app.use(express.json());
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
@@ -901,6 +904,10 @@ app.get('/api/events', (req, res) => {
   sseClients.add(res);
   req.on('close', () => sseClients.delete(res));
 });
+
+// ── Analytics route ──────────────────────────────────────────────────────────
+
+app.use('/api/analytics', analyticsRouter);
 
 // ── Auth routes ──────────────────────────────────────────────────────────────
 

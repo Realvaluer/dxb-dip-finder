@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import useFilters from '../hooks/useFilters';
 import useMediaQuery from '../hooks/useMediaQuery';
 import useBookmarks from '../hooks/useBookmarks';
@@ -13,6 +13,7 @@ import ListingsTable from '../components/ListingsTable';
 import DesktopFilterBar from '../components/DesktopFilterBar';
 import Pagination from '../components/Pagination';
 import { SkeletonCards } from '../components/Skeleton';
+import { trackFilter } from '../lib/analytics';
 
 const SORT_OPTIONS = [
   { value: 'newest', label: '↓ Most recent' },
@@ -41,8 +42,11 @@ export default function Feed() {
   const [page, setPage] = useState(1);
 
   // Reset page to 1 when filters change
+  const isFirstRender = useRef(true);
   useEffect(() => {
     setPage(1);
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (isDesktop) trackFilter(filters);
   }, [queryString]);
 
   // Build API URL based on view mode

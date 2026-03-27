@@ -1,11 +1,17 @@
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useFetch } from '../hooks/useApi';
 import { formatPrice, formatDate, sourceTag } from '../utils';
+import { trackPropertyView, trackClick } from '../lib/analytics';
 
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: listing, loading, error } = useFetch(`/api/listings/${id}`, [id]);
+
+  useEffect(() => {
+    if (listing) trackPropertyView(listing.id, listing.property_name || listing.community);
+  }, [listing]);
 
   if (loading) {
     return (
@@ -279,7 +285,7 @@ export default function ListingDetail() {
 
         {/* External link */}
         {l.url && (
-          <a href={l.url} target="_blank" rel="noopener noreferrer" className={linkStyle}>
+          <a href={l.url} target="_blank" rel="noopener noreferrer" onClick={() => trackClick('view_external', { source: l.source, property_id: l.id })} className={linkStyle}>
             → View on {l.source}
           </a>
         )}
