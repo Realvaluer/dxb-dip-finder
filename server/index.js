@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3001;
 const TABLE = 'ddf_listings';
 
 app.use(helmet());
-app.use(cors({ origin: ['https://dxpdipfinder.com', 'https://admin.dxpdipfinder.com'] }));
+app.use(cors({ origin: ['https://dxbdipfinder.com', 'https://www.dxbdipfinder.com', 'https://admin.dxbdipfinder.com'] }));
 app.use(compression());
 app.use(express.json());
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 200 }));
