@@ -257,6 +257,20 @@ function namesMatch(ddfName, rvName) {
   return false;
 }
 
+// ── Transaction quality filters ───────────────────────────────────────────
+
+function isCleanSale(tx) {
+  if (!tx.size_sqft || tx.size_sqft < 100 || tx.size_sqft > 30000) return false;
+  if (!tx.price || tx.price < 50000) return false;
+  return true;
+}
+
+function isCleanRental(tx) {
+  if (!tx.size_sqft || tx.size_sqft < 100 || tx.size_sqft > 30000) return false;
+  if (!tx.price || tx.price > 20000000) return false;
+  return true;
+}
+
 // ── Size matching ─────────────────────────────────────────────────────────
 
 function matchBySize(listingSize, candidates) {
@@ -264,19 +278,19 @@ function matchBySize(listingSize, candidates) {
   const ls = listingSize || 0;
   if (!ls) return candidates[0]; // no size info — just take most recent
 
-  // ±30% match first
-  const min30 = ls * 0.7, max30 = ls * 1.3;
-  const m30 = candidates.find(s => !s.size_sqft || (s.size_sqft >= min30 && s.size_sqft <= max30));
-  if (m30) return m30;
+  // ±15% match first
+  const min15 = ls * 0.85, max15 = ls * 1.15;
+  const m = candidates.find(s => s.size_sqft && s.size_sqft >= min15 && s.size_sqft <= max15);
+  if (m) return m;
 
-  // Fallback: closest within ±60%
+  // Fallback: closest within ±25%
   let best = null, bd = Infinity;
   for (const s of candidates) {
     if (!s.size_sqft) continue;
     const d = Math.abs(s.size_sqft - ls) / ls;
-    if (d < 0.6 && d < bd) { best = s; bd = d; }
+    if (d < 0.25 && d < bd) { best = s; bd = d; }
   }
-  return best || candidates[0]; // if nothing within ±60%, take most recent anyway
+  return best;
 }
 
 // ── Pre-load RV data for a community ──────────────────────────────────────
@@ -333,12 +347,14 @@ async function loadRvCommunity(rvCommunityName) {
 async function findMatch(listing, rvData) {
   const isSale = listing.purpose?.toLowerCase() === 'sale';
   const pool = isSale ? rvData.sales : rvData.rentals;
+  const isClean = isSale ? isCleanSale : isCleanRental;
   const rawBed = listing.bedrooms;
   const bed = (rawBed === null || rawBed === '' || rawBed === 'Studio' || rawBed === 'studio') ? 0 : parseInt(rawBed, 10);
   const bedNum = isNaN(bed) ? 0 : bed;
 
-  // Filter by: name match + bedrooms
+  // Filter by: quality + name match + bedrooms (pool already sorted date desc)
   const candidates = pool.filter(tx => {
+    if (!isClean(tx)) return false;
     const txBed = tx.bedrooms === null ? 0 : tx.bedrooms;
     if (txBed !== bedNum) return false;
     if (!tx.property_name) return false;

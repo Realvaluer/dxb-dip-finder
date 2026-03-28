@@ -156,6 +156,18 @@ async function fetchLastSales(rows) {
     return [...combos.values()];
   }
 
+  // Transaction quality filters
+  function isCleanSale(tx) {
+    if (!tx.size_sqft || tx.size_sqft < 100 || tx.size_sqft > 30000) return false;
+    if (!tx.price || tx.price < 50000) return false;
+    return true;
+  }
+  function isCleanRental(tx) {
+    if (!tx.size_sqft || tx.size_sqft < 100 || tx.size_sqft > 30000) return false;
+    if (!tx.price || tx.price > 20000000) return false;
+    return true;
+  }
+
   // Helper: match listing to best result by ±15% size
   function matchBySize(listing, candidates) {
     const listingSize = listing.size_sqft;
@@ -294,7 +306,7 @@ async function fetchLastSales(rows) {
         { or: 'subtype.eq.Sale,subtype.eq.Pre-registration' },
         'id, price, price_sqft, size_sqft, date, bedrooms, subtype'
       );
-      return data.map(r => ({ ...r, _type: r.subtype }));
+      return data.filter(isCleanSale).map(r => ({ ...r, _type: r.subtype }));
     }, 'sale'),
     processCombos(rentCombos, async (combo) => {
       const bed = parseInt(combo.bedrooms, 10);
@@ -304,7 +316,7 @@ async function fetchLastSales(rows) {
         { property_category: 'Residential' },
         'id, price, price_sqft, size_sqft, date, bedrooms'
       );
-      return data.map(r => ({ ...r, _type: 'Rent listing' }));
+      return data.filter(isCleanRental).map(r => ({ ...r, _type: 'Rent listing' }));
     }, 'rent'),
   ]);
 
