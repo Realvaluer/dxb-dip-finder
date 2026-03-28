@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
 
-// Global cache
 let _propertyList = null;
 let _fuseInstance = null;
 let _loadPromise = null;
@@ -34,74 +33,71 @@ function useDebounce(value, delay) {
   return debounced;
 }
 
-// FIX 2-4: Exact substring → numeric token filter → fuzzy fallback → sort by listing_count
-function searchProperties(query) {
+// FIX 4: AND logic — every token must match. Numeric tokens use word boundary.
+function searchProperties(query, activeCommunities = [], activeBuildings = []) {
   if (!_propertyList || !query || query.trim().length < 2) return { communities: [], buildings: [] };
 
   const q = query.trim().toLowerCase();
+  const tokens = q.split(/\s+/).filter(t => t.length > 0);
 
-  // Step 1: exact substring match on property_name and community
-  let exactMatches = _propertyList.filter(p =>
-    (p.property_name || '').toLowerCase().includes(q) ||
-    (p.community || '').toLowerCase().includes(q)
-  );
+  let matches;
 
-  // Step 2: if query contains numbers, require those numbers in results
-  const numericTokens = query.match(/\d+/g);
-  if (numericTokens) {
-    exactMatches = exactMatches.filter(p =>
-      numericTokens.every(n =>
-        (p.property_name || '').includes(n) ||
-        (p.community || '').includes(n)
-      )
-    );
-  }
-
-  // Also filter by all word tokens for multi-word queries like "residence 110"
-  const wordTokens = q.split(/\s+/).filter(t => t.length > 0);
-  if (wordTokens.length > 1) {
-    exactMatches = exactMatches.filter(p => {
-      const combined = ((p.property_name || '') + ' ' + (p.community || '')).toLowerCase();
-      return wordTokens.every(t => combined.includes(t));
+  // Short queries (≤3 chars or single token): exact substring match
+  if (tokens.length <= 1 || q.length <= 3) {
+    matches = _propertyList.filter(p => {
+      const searchable = ((p.property_name || '') + ' ' + (p.community || '')).toLowerCase();
+      return searchable.includes(q);
+    });
+  } else {
+    // Multi-token: AND logic — every token must appear
+    matches = _propertyList.filter(p => {
+      const searchable = ((p.property_name || '') + ' ' + (p.community || '')).toLowerCase();
+      return tokens.every(token => {
+        // Numeric tokens: word boundary match ("1" must not match "10")
+        if (/^\d+$/.test(token)) {
+          return new RegExp(`\\b${token}\\b`).test(searchable);
+        }
+        return searchable.includes(token);
+      });
     });
   }
 
-  // Step 3: fuzzy ONLY if query >= 5 chars AND exact < 3 results
+  // Fuzzy fallback: only if query >= 5 chars AND exact < 3 results
   let fuzzyResults = [];
-  if (q.length >= 5 && exactMatches.length < 3 && _fuseInstance) {
+  if (q.length >= 5 && matches.length < 3 && _fuseInstance) {
     const fuzzyHits = _fuseInstance.search(q).slice(0, 20).map(r => r.item);
-    const exactIds = new Set(exactMatches.map(p => `${p.property_name}|${p.community}`));
+    const exactIds = new Set(matches.map(p => `${p.property_name}|${p.community}`));
     fuzzyResults = fuzzyHits.filter(p => !exactIds.has(`${p.property_name}|${p.community}`));
   }
 
-  // Combine: exact first (sorted by listing_count), then fuzzy
-  const combined = [...exactMatches, ...fuzzyResults];
+  const combined = [...matches, ...fuzzyResults];
 
-  // Sort by listing_count descending
-  combined.sort((a, b) => (b.listing_count || b.count || 0) - (a.listing_count || a.count || 0));
+  // FIX 2: Hide already-selected communities and buildings
+  const activeCommSet = new Set(activeCommunities.map(c => c.toLowerCase()));
+  const activeBldgSet = new Set(activeBuildings.map(b => b.toLowerCase()));
 
   // Group into communities and buildings
   const commMap = {};
   const bldgMap = {};
-  for (const h of combined.slice(0, 40)) {
-    // Community match: only if the query matches the community name
-    if (h.community && h.community.toLowerCase().includes(q)) {
+  for (const h of combined.slice(0, 60)) {
+    if (h.community && h.community.toLowerCase().includes(q) && !activeCommSet.has(h.community.toLowerCase())) {
       if (!commMap[h.community]) commMap[h.community] = 0;
       commMap[h.community] += (h.listing_count || h.count || 1);
     }
-    if (h.property_name) {
+    if (h.property_name && !activeBldgSet.has(h.property_name.toLowerCase())) {
       const key = `${h.property_name}|${h.community}`;
       if (!bldgMap[key]) bldgMap[key] = { label: h.property_name, community: h.community || '', cnt: h.listing_count || h.count || 1 };
     }
   }
 
+  // FIX 1: Sort alphabetically A-Z
   return {
-    communities: Object.entries(commMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, cnt]) => ({ label, cnt })),
-    buildings: Object.values(bldgMap).sort((a, b) => b.cnt - a.cnt).slice(0, 15),
+    communities: Object.entries(commMap).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 5).map(([label, cnt]) => ({ label, cnt })),
+    buildings: Object.values(bldgMap).sort((a, b) => a.label.localeCompare(b.label)).slice(0, 15),
   };
 }
 
-export default function SearchBar({ value, onChange, onSelectCommunity, onSelectBuilding }) {
+export default function SearchBar({ value, onChange, onSelectCommunity, onSelectBuilding, activeCommunities = [], activeBuildings = [] }) {
   const [local, setLocal] = useState('');
   const [results, setResults] = useState({ communities: [], buildings: [] });
   const [open, setOpen] = useState(false);
@@ -116,7 +112,7 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
 
   useEffect(() => { setLocal(value); }, [value]);
 
-  // Close on click outside or Escape
+  // Close on click outside or Escape only
   useEffect(() => {
     function handleClickOutside(e) {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
@@ -132,26 +128,29 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
     };
   }, []);
 
-  // Run search on debounced query
+  // Run search on debounced query — re-run when active filters change too
   useEffect(() => {
     if (!loaded || debouncedQuery.trim().length < 2) {
       setResults({ communities: [], buildings: [] });
       if (debouncedQuery.trim().length < 2) setOpen(false);
       return;
     }
-    const r = searchProperties(debouncedQuery);
+    const r = searchProperties(debouncedQuery, activeCommunities, activeBuildings);
     setResults(r);
     setOpen(true);
-  }, [debouncedQuery, loaded]);
+  }, [debouncedQuery, loaded, activeCommunities, activeBuildings]);
 
+  // FIX 3: Stay open after selection, clear input
   function selectCommunity(label) {
     setLocal('');
     onSelectCommunity(label);
+    // Don't close — dropdown will update to remove selected item
   }
 
   function selectBuilding(label) {
     setLocal('');
     onSelectBuilding(label);
+    // Don't close
   }
 
   const hasSuggestions = results.communities.length > 0 || results.buildings.length > 0;

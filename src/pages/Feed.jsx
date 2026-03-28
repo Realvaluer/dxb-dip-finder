@@ -137,6 +137,8 @@ export default function Feed() {
           <SearchBar
             value={filters.search}
             onChange={v => setFilter('search', v)}
+            activeCommunities={filters.communities}
+            activeBuildings={filters.buildings}
             onSelectCommunity={c => {
               const updated = filters.communities.includes(c) ? filters.communities : [...filters.communities, c];
               setFilters({ communities: updated, search: '' });
@@ -219,6 +221,8 @@ export default function Feed() {
           <SearchBar
             value={filters.search}
             onChange={v => setFilter('search', v)}
+            activeCommunities={filters.communities}
+            activeBuildings={filters.buildings}
             onSelectCommunity={c => {
               const updated = filters.communities.includes(c) ? filters.communities : [...filters.communities, c];
               setFilters({ communities: updated, search: '' });
