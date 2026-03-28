@@ -53,9 +53,11 @@ function searchProperties(query, activeCommunities = [], activeBuildings = []) {
     matches = _propertyList.filter(p => {
       const searchable = ((p.property_name || '') + ' ' + (p.community || '')).toLowerCase();
       return tokens.every(token => {
-        // Numeric tokens: word boundary match ("1" must not match "10")
+        // Numeric tokens: exact token match (split on spaces/punctuation)
+        // "110" matches "Residence 110" but NOT "1100" or "2110"
         if (/^\d+$/.test(token)) {
-          return new RegExp(`\\b${token}\\b`).test(searchable);
+          const searchableTokens = searchable.split(/[\s\-_,.()/]+/);
+          return searchableTokens.some(t => t === token);
         }
         return searchable.includes(token);
       });
