@@ -10,7 +10,14 @@ export default function ListingDetail() {
   const { data: listing, loading, error } = useFetch(`/api/listings/${id}`, [id]);
 
   useEffect(() => {
-    if (listing) trackPropertyView(listing.id, listing.property_name || listing.community, listing.community, listing.url, listing.price_aed, listing.change_pct);
+    if (listing) trackPropertyView(listing.id, listing.property_name || listing.community, {
+      community: listing.community,
+      url: listing.url,
+      price: listing.price_aed,
+      change_pct: listing.change_pct,
+      purpose: listing.purpose,
+      ready_off_plan: listing.ready_off_plan,
+    });
   }, [listing]);
 
   if (loading) {

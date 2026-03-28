@@ -75,15 +75,17 @@ export function trackClick(buttonName, extra = {}) {
   send('click', { event_data: { button: buttonName, ...extra } });
 }
 
-export function trackPropertyView(propertyId, propertyName, community, url, price, changePct) {
+export function trackPropertyView(propertyId, propertyName, extra = {}) {
   send('property_view', {
     property_id: propertyId,
     property_name: propertyName,
     event_data: {
-      community: community || null,
-      url: url || null,
-      price: price || null,
-      change_pct: changePct != null ? changePct : null,
+      community: extra.community || null,
+      url: extra.url || null,
+      price: extra.price || null,
+      change_pct: extra.change_pct != null ? extra.change_pct : null,
+      purpose: extra.purpose || null,
+      ready_off_plan: extra.ready_off_plan || null,
     },
   });
 }
