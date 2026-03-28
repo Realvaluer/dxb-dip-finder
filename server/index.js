@@ -893,31 +893,30 @@ app.get('/api/property-list', async (req, res) => {
       return res.json(propertyListCache.data);
     }
 
-    // FIX 3: Single query with client-side dedup (was 40 paginated queries)
-    // Fetch property_name + community in one batch, dedup in JS
-    const { data, error } = await supabase.rpc('get_distinct_properties');
-
-    let result;
-    if (error || !data) {
-      // Fallback: single large query with limit
-      const { data: fallback } = await supabase
+    // FIX 1: Correct listing counts — paginate all rows, group by name+community
+    const allData = [];
+    let from = 0;
+    while (from < 200000) {
+      const { data: batch } = await supabase
         .from(TABLE)
         .select('property_name, community')
         .eq('is_valid', true)
         .not('property_name', 'is', null)
-        .limit(50000);
-
-      const combos = {};
-      for (const r of (fallback || [])) {
-        if (!r.property_name) continue;
-        const key = `${r.property_name}|${r.community || ''}`;
-        if (!combos[key]) combos[key] = { property_name: r.property_name, community: r.community || '', count: 0 };
-        combos[key].count++;
-      }
-      result = Object.values(combos).sort((a, b) => b.count - a.count);
-    } else {
-      result = data;
+        .range(from, from + 4999);
+      if (!batch || batch.length === 0) break;
+      allData.push(...batch);
+      from += 5000;
+      if (batch.length < 5000) break;
     }
+
+    const combos = {};
+    for (const r of allData) {
+      if (!r.property_name) continue;
+      const key = `${r.property_name}|${r.community || ''}`;
+      if (!combos[key]) combos[key] = { property_name: r.property_name, community: r.community || '', listing_count: 0 };
+      combos[key].listing_count++;
+    }
+    const result = Object.values(combos).sort((a, b) => b.listing_count - a.listing_count || a.property_name.localeCompare(b.property_name));
 
     propertyListCache = { data: result, ts: Date.now() };
     res.json(result);

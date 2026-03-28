@@ -1,29 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
 
-// Cache the property list globally so it persists across re-renders/navigations
+// Global cache
+let _propertyList = null;
 let _fuseInstance = null;
 let _loadPromise = null;
 
-function loadFuse() {
-  if (_fuseInstance) return Promise.resolve(_fuseInstance);
+function loadPropertyList() {
+  if (_propertyList) return Promise.resolve(_propertyList);
   if (_loadPromise) return _loadPromise;
   _loadPromise = fetch('/api/property-list')
     .then(r => r.json())
     .then(data => {
+      _propertyList = data;
       _fuseInstance = new Fuse(data, {
         keys: ['property_name', 'community'],
         threshold: 0.35,
         includeScore: true,
         ignoreLocation: true,
       });
-      return _fuseInstance;
+      return data;
     })
     .catch(() => null);
   return _loadPromise;
 }
 
-// Simple debounce hook
 function useDebounce(value, delay) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -33,18 +34,84 @@ function useDebounce(value, delay) {
   return debounced;
 }
 
+// FIX 2-4: Exact substring → numeric token filter → fuzzy fallback → sort by listing_count
+function searchProperties(query) {
+  if (!_propertyList || !query || query.trim().length < 2) return { communities: [], buildings: [] };
+
+  const q = query.trim().toLowerCase();
+
+  // Step 1: exact substring match on property_name and community
+  let exactMatches = _propertyList.filter(p =>
+    (p.property_name || '').toLowerCase().includes(q) ||
+    (p.community || '').toLowerCase().includes(q)
+  );
+
+  // Step 2: if query contains numbers, require those numbers in results
+  const numericTokens = query.match(/\d+/g);
+  if (numericTokens) {
+    exactMatches = exactMatches.filter(p =>
+      numericTokens.every(n =>
+        (p.property_name || '').includes(n) ||
+        (p.community || '').includes(n)
+      )
+    );
+  }
+
+  // Also filter by all word tokens for multi-word queries like "residence 110"
+  const wordTokens = q.split(/\s+/).filter(t => t.length > 0);
+  if (wordTokens.length > 1) {
+    exactMatches = exactMatches.filter(p => {
+      const combined = ((p.property_name || '') + ' ' + (p.community || '')).toLowerCase();
+      return wordTokens.every(t => combined.includes(t));
+    });
+  }
+
+  // Step 3: fuzzy ONLY if query >= 5 chars AND exact < 3 results
+  let fuzzyResults = [];
+  if (q.length >= 5 && exactMatches.length < 3 && _fuseInstance) {
+    const fuzzyHits = _fuseInstance.search(q).slice(0, 20).map(r => r.item);
+    const exactIds = new Set(exactMatches.map(p => `${p.property_name}|${p.community}`));
+    fuzzyResults = fuzzyHits.filter(p => !exactIds.has(`${p.property_name}|${p.community}`));
+  }
+
+  // Combine: exact first (sorted by listing_count), then fuzzy
+  const combined = [...exactMatches, ...fuzzyResults];
+
+  // Sort by listing_count descending
+  combined.sort((a, b) => (b.listing_count || b.count || 0) - (a.listing_count || a.count || 0));
+
+  // Group into communities and buildings
+  const commMap = {};
+  const bldgMap = {};
+  for (const h of combined.slice(0, 40)) {
+    // Community match: only if the query matches the community name
+    if (h.community && h.community.toLowerCase().includes(q)) {
+      if (!commMap[h.community]) commMap[h.community] = 0;
+      commMap[h.community] += (h.listing_count || h.count || 1);
+    }
+    if (h.property_name) {
+      const key = `${h.property_name}|${h.community}`;
+      if (!bldgMap[key]) bldgMap[key] = { label: h.property_name, community: h.community || '', cnt: h.listing_count || h.count || 1 };
+    }
+  }
+
+  return {
+    communities: Object.entries(commMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, cnt]) => ({ label, cnt })),
+    buildings: Object.values(bldgMap).sort((a, b) => b.cnt - a.cnt).slice(0, 15),
+  };
+}
+
 export default function SearchBar({ value, onChange, onSelectCommunity, onSelectBuilding }) {
   const [local, setLocal] = useState('');
   const [results, setResults] = useState({ communities: [], buildings: [] });
   const [open, setOpen] = useState(false);
-  const [fuse, setFuse] = useState(_fuseInstance);
+  const [loaded, setLoaded] = useState(!!_propertyList);
   const wrapRef = useRef(null);
 
   const debouncedQuery = useDebounce(local, 200);
 
-  // Load Fuse.js on mount
   useEffect(() => {
-    loadFuse().then(f => { if (f) setFuse(f); });
+    loadPropertyList().then(d => { if (d) setLoaded(true); });
   }, []);
 
   useEffect(() => { setLocal(value); }, [value]);
@@ -65,47 +132,25 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
     };
   }, []);
 
-  // Run Fuse.js search on debounced query (no API calls)
+  // Run search on debounced query
   useEffect(() => {
-    if (!fuse || debouncedQuery.trim().length < 2) {
+    if (!loaded || debouncedQuery.trim().length < 2) {
       setResults({ communities: [], buildings: [] });
       if (debouncedQuery.trim().length < 2) setOpen(false);
       return;
     }
-
-    const hits = fuse.search(debouncedQuery.trim()).slice(0, 30).map(r => r.item);
-
-    const commMap = {};
-    const bldgMap = {};
-    for (const h of hits) {
-      // Only show community if the search term matches the community name
-      if (h.community && h.community.toLowerCase().includes(debouncedQuery.trim().toLowerCase())) {
-        if (!commMap[h.community]) commMap[h.community] = 0;
-        commMap[h.community] += h.count;
-      }
-      if (h.property_name) {
-        const key = `${h.property_name}|${h.community}`;
-        if (!bldgMap[key]) bldgMap[key] = { label: h.property_name, community: h.community, cnt: 0 };
-        bldgMap[key].cnt += h.count;
-      }
-    }
-
-    setResults({
-      communities: Object.entries(commMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, cnt]) => ({ label, cnt })),
-      buildings: Object.values(bldgMap).sort((a, b) => b.cnt - a.cnt).slice(0, 15),
-    });
+    const r = searchProperties(debouncedQuery);
+    setResults(r);
     setOpen(true);
-  }, [debouncedQuery, fuse]);
+  }, [debouncedQuery, loaded]);
 
   function selectCommunity(label) {
     setLocal('');
-    // Do NOT close dropdown — user may want to add more
     onSelectCommunity(label);
   }
 
   function selectBuilding(label) {
     setLocal('');
-    // Do NOT close dropdown
     onSelectBuilding(label);
   }
 
@@ -136,7 +181,6 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
           </button>
         )}
 
-        {/* Dropdown — scrollable, max 260px */}
         {open && (hasSuggestions || local.length >= 2) && (
           <div className="absolute left-0 right-0 top-full mt-1 bg-card border border-border rounded-xl shadow-lg z-50 max-h-[260px] overflow-y-auto overflow-x-hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
             {results.communities.length > 0 && (
@@ -146,7 +190,7 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
                   <button key={s.label} onMouseDown={() => selectCommunity(s.label)}
                     className="w-full text-left px-3 py-2.5 text-xs text-white hover:bg-accent/10 active:bg-accent/20 min-h-[44px] flex items-center justify-between">
                     <span className="truncate">{s.label}</span>
-                    <span className="text-muted text-[10px] ml-2">{s.cnt}</span>
+                    <span className="text-muted text-[10px] ml-2">{s.cnt.toLocaleString()}</span>
                   </button>
                 ))}
               </>
@@ -158,7 +202,7 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
                   <button key={`${s.label}|${s.community}`} onMouseDown={() => selectBuilding(s.label)}
                     className="w-full text-left px-3 py-2.5 text-xs text-white hover:bg-accent/10 active:bg-accent/20 min-h-[44px] flex flex-col">
                     <span className="truncate">{s.label}</span>
-                    <span className="text-muted text-[10px]">{s.community} · {s.cnt} listings</span>
+                    <span className="text-muted text-[10px]">{s.community} · {s.cnt.toLocaleString()} listings</span>
                   </button>
                 ))}
               </>
