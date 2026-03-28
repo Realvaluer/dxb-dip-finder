@@ -894,20 +894,22 @@ app.get('/api/property-list', async (req, res) => {
     }
 
     // FIX 1: Correct listing counts — paginate all rows, group by name+community
+    // Supabase default limit is 1000 per request, so use range() in batches of 1000
     const allData = [];
     let from = 0;
-    while (from < 200000) {
+    while (from < 300000) {
       const { data: batch } = await supabase
         .from(TABLE)
         .select('property_name, community')
         .eq('is_valid', true)
         .not('property_name', 'is', null)
-        .range(from, from + 4999);
+        .range(from, from + 999);
       if (!batch || batch.length === 0) break;
       allData.push(...batch);
-      from += 5000;
-      if (batch.length < 5000) break;
+      from += 1000;
+      if (batch.length < 1000) break;
     }
+    console.log(`[property-list] Fetched ${allData.length} rows, deduplicating...`);
 
     const combos = {};
     for (const r of allData) {
