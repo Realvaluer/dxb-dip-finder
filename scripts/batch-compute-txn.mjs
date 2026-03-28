@@ -267,7 +267,7 @@ function isCleanSale(tx) {
 
 function isCleanRental(tx) {
   if (!tx.size_sqft || tx.size_sqft < 100 || tx.size_sqft > 30000) return false;
-  if (!tx.price || tx.price > 20000000) return false;
+  if (!tx.price || tx.price > 5000000) return false;
   return true;
 }
 
