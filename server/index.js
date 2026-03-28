@@ -430,18 +430,9 @@ app.get('/api/listings', async (req, res) => {
     const { data, count, error } = await query;
     if (error) throw error;
 
-    // Fetch ref data (fast, same DB). Only fetch sales if DB columns not yet populated.
+    // All dip_prev_* and last_txn_* columns are pre-stored on the row — no extra round-trips needed.
     const rows = data || [];
-    const needsSaleLookup = rows.some(r => r.last_txn_price == null);
-    const [refMap, saleMap] = await Promise.all([
-      fetchRefData(rows),
-      needsSaleLookup ? fetchLastSales(rows) : Promise.resolve({}),
-    ]);
-
-    const listings = rows.map(r => {
-      const sale = saleMap[r.id];
-      return mapRow(r, refMap[r.dip_ref_id], sale ? { sale_price: sale.sale_price, sale_date: sale.sale_date, sale_size: sale.sale_size, sale_type: sale.sale_type } : null);
-    });
+    const listings = rows.map(r => mapRow(r, null, null));
 
     res.json({ listings, total: count || 0 });
   } catch (err) {
@@ -893,32 +884,55 @@ app.get('/api/property-list', async (req, res) => {
       return res.json(propertyListCache.data);
     }
 
-    // FIX 1: Correct listing counts — paginate all rows, group by name+community
-    // Supabase default limit is 1000 per request, so use range() in batches of 1000
-    const allData = [];
-    let from = 0;
-    while (from < 300000) {
-      const { data: batch } = await supabase
-        .from(TABLE)
-        .select('property_name, community')
-        .eq('is_valid', true)
-        .not('property_name', 'is', null)
-        .range(from, from + 999);
-      if (!batch || batch.length === 0) break;
-      allData.push(...batch);
-      from += 1000;
-      if (batch.length < 1000) break;
-    }
-    console.log(`[property-list] Fetched ${allData.length} rows, deduplicating...`);
+    // Try RPC first (single DB call — create via Supabase SQL Editor if not present)
+    // CREATE OR REPLACE FUNCTION get_distinct_properties()
+    // RETURNS TABLE(property_name text, community text, listing_count bigint)
+    // LANGUAGE sql STABLE AS $$
+    //   SELECT property_name, community, COUNT(*)::bigint
+    //   FROM ddf_listings WHERE property_name IS NOT NULL AND is_valid = true
+    //   GROUP BY property_name, community ORDER BY property_name ASC;
+    // $$;
+    let result = null;
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_distinct_properties');
+    if (!rpcErr && rpcData && rpcData.length > 0) {
+      result = rpcData;
+      console.log(`[property-list] RPC returned ${result.length} distinct properties`);
+    } else {
+      // Fallback: parallel batch fetch (all pages fired concurrently in groups of 50)
+      // Get total count first, then fire all pages in parallel
+      const { count: totalCount } = await supabase
+        .from(TABLE).select('id', { count: 'exact', head: true })
+        .eq('is_valid', true).not('property_name', 'is', null);
 
-    const combos = {};
-    for (const r of allData) {
-      if (!r.property_name) continue;
-      const key = `${r.property_name}|${r.community || ''}`;
-      if (!combos[key]) combos[key] = { property_name: r.property_name, community: r.community || '', listing_count: 0 };
-      combos[key].listing_count++;
+      const total = totalCount || 200000;
+      const pageSize = 1000;
+      const pages = Math.ceil(total / pageSize);
+      const CONCURRENCY = 50;
+      const allData = [];
+
+      for (let i = 0; i < pages; i += CONCURRENCY) {
+        const batch = [];
+        for (let j = i; j < Math.min(i + CONCURRENCY, pages); j++) {
+          batch.push(
+            supabase.from(TABLE).select('property_name, community')
+              .eq('is_valid', true).not('property_name', 'is', null)
+              .range(j * pageSize, j * pageSize + pageSize - 1)
+          );
+        }
+        const results = await Promise.all(batch);
+        for (const { data } of results) if (data) allData.push(...data);
+      }
+
+      console.log(`[property-list] Parallel fetch: ${allData.length} rows in ${pages} pages`);
+      const combos = {};
+      for (const r of allData) {
+        if (!r.property_name) continue;
+        const key = `${r.property_name}|${r.community || ''}`;
+        if (!combos[key]) combos[key] = { property_name: r.property_name, community: r.community || '', listing_count: 0 };
+        combos[key].listing_count++;
+      }
+      result = Object.values(combos).sort((a, b) => b.listing_count - a.listing_count || a.property_name.localeCompare(b.property_name));
     }
-    const result = Object.values(combos).sort((a, b) => b.listing_count - a.listing_count || a.property_name.localeCompare(b.property_name));
 
     propertyListCache = { data: result, ts: Date.now() };
     res.json(result);
@@ -994,11 +1008,7 @@ app.get('/api/saved', requireAuth, async (req, res) => {
       .in('id', ids);
 
     if (error) throw error;
-    const [refMap, saleMap] = await Promise.all([
-      fetchRefData(data || []),
-      fetchLastSales(data || []),
-    ]);
-    const rows = (data || []).map(r => mapRow(r, refMap[r.dip_ref_id], saleMap[r.id]));
+    const rows = (data || []).map(r => mapRow(r, null, null));
     res.json({ listings: rows, total: rows.length });
   } catch (err) {
     console.error('Saved listings error:', err);
