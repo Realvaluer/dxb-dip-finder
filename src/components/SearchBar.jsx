@@ -65,11 +65,22 @@ function searchProperties(query, activeCommunities = [], activeBuildings = []) {
   }
 
   // Fuzzy fallback: only if query >= 5 chars AND exact < 3 results
+  // Apply same numeric token filter to fuzzy results to prevent "110" matching "1000"
   let fuzzyResults = [];
   if (q.length >= 5 && matches.length < 3 && _fuseInstance) {
     const fuzzyHits = _fuseInstance.search(q).slice(0, 20).map(r => r.item);
     const exactIds = new Set(matches.map(p => `${p.property_name}|${p.community}`));
-    fuzzyResults = fuzzyHits.filter(p => !exactIds.has(`${p.property_name}|${p.community}`));
+    const numTokens = tokens.filter(t => /^\d+$/.test(t));
+    fuzzyResults = fuzzyHits.filter(p => {
+      if (exactIds.has(`${p.property_name}|${p.community}`)) return false;
+      // If query has numeric tokens, fuzzy results must also contain them exactly
+      if (numTokens.length > 0) {
+        const searchable = ((p.property_name || '') + ' ' + (p.community || '')).toLowerCase();
+        const searchableTokens = searchable.split(/[\s\-_,.()/]+/);
+        if (!numTokens.every(n => searchableTokens.some(t => t === n))) return false;
+      }
+      return true;
+    });
   }
 
   const combined = [...matches, ...fuzzyResults];
