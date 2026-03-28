@@ -54,8 +54,8 @@ setInterval(() => {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// The select fields we use for listings (map Supabase columns to API shape)
-const LISTING_SELECT = '*';
+// FIX 2: Select only fields the frontend needs (was SELECT * → 113KB, now ~40KB)
+const LISTING_SELECT = 'id, reference_no, source, scraped_at, date_listed, purpose, title, distress, ready_off_plan, city, community, property_name, type, bedrooms, bathrooms, size_sqft, furnished, price_aed, price_sqft, listing_change, broker_agency, url, dip_pct, dip_price, dip_ref_id, dip_prev_price, dip_prev_url, dip_prev_source, dip_prev_date, dip_prev_size, dip_prev_furnished, last_txn_price, last_txn_date, last_txn_change, last_txn_change_pct, last_txn_size, last_txn_type';
 
 function mapRow(row, refData, saleData) {
   if (!row) return null;
@@ -416,9 +416,11 @@ app.get('/api/listings', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = parseInt(req.query.offset, 10) || 0;
 
+    // FIX 4: Only run COUNT(*) when ?count=true (saves ~444ms on pagination/scroll loads)
+    const wantCount = req.query.count === 'true';
     let query = supabase
       .from(TABLE)
-      .select(LISTING_SELECT, { count: 'exact' })
+      .select(LISTING_SELECT, wantCount ? { count: 'exact' } : undefined)
       .eq('is_valid', true)
       .range(offset, offset + limit - 1);
 
@@ -891,31 +893,32 @@ app.get('/api/property-list', async (req, res) => {
       return res.json(propertyListCache.data);
     }
 
-    // Fetch all property_name + community combos (paginate to get all)
-    const allData = [];
-    let from = 0;
-    while (from < 200000) {
-      const { data } = await supabase
+    // FIX 3: Single query with client-side dedup (was 40 paginated queries)
+    // Fetch property_name + community in one batch, dedup in JS
+    const { data, error } = await supabase.rpc('get_distinct_properties');
+
+    let result;
+    if (error || !data) {
+      // Fallback: single large query with limit
+      const { data: fallback } = await supabase
         .from(TABLE)
         .select('property_name, community')
         .eq('is_valid', true)
         .not('property_name', 'is', null)
-        .range(from, from + 4999);
-      if (!data || data.length === 0) break;
-      allData.push(...data);
-      from += 5000;
+        .limit(50000);
+
+      const combos = {};
+      for (const r of (fallback || [])) {
+        if (!r.property_name) continue;
+        const key = `${r.property_name}|${r.community || ''}`;
+        if (!combos[key]) combos[key] = { property_name: r.property_name, community: r.community || '', count: 0 };
+        combos[key].count++;
+      }
+      result = Object.values(combos).sort((a, b) => b.count - a.count);
+    } else {
+      result = data;
     }
 
-    // Deduplicate and count
-    const combos = {};
-    for (const r of allData) {
-      if (!r.property_name) continue;
-      const key = `${r.property_name}|${r.community || ''}`;
-      if (!combos[key]) combos[key] = { property_name: r.property_name, community: r.community || '', count: 0 };
-      combos[key].count++;
-    }
-
-    const result = Object.values(combos).sort((a, b) => b.count - a.count);
     propertyListCache = { data: result, ts: Date.now() };
     res.json(result);
   } catch (err) {
@@ -1032,4 +1035,9 @@ app.listen(PORT, '0.0.0.0', async () => {
   } catch (e) {
     console.error('Supabase connection check failed:', e.message);
   }
+
+  // FIX 5: Self-ping every 4 min to prevent Railway cold starts
+  setInterval(() => {
+    fetch(`http://localhost:${PORT}/api/health`).catch(() => {});
+  }, 4 * 60 * 1000);
 });

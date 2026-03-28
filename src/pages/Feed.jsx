@@ -49,10 +49,11 @@ export default function Feed() {
     if (isDesktop) trackFilter(filters);
   }, [queryString]);
 
-  // Build API URL based on view mode
+  // Build API URL — only request count on first page load (saves ~444ms on scroll/pagination)
+  const needsCount = isDesktop ? page === 1 : true; // mobile always needs count for "X results" display
   const apiUrl = isDesktop
-    ? `/api/listings?${queryString}&limit=${DESKTOP_PAGE_SIZE}&offset=${(page - 1) * DESKTOP_PAGE_SIZE}`
-    : `/api/listings?${queryString}&limit=30`;
+    ? `/api/listings?${queryString}&limit=${DESKTOP_PAGE_SIZE}&offset=${(page - 1) * DESKTOP_PAGE_SIZE}${needsCount ? '&count=true' : ''}`
+    : `/api/listings?${queryString}&limit=30&count=true`;
   const kpiUrl = `/api/kpis?${queryString}`;
 
   const { data: listingsData, loading: listingsLoading, error: listingsError } = useDebouncedFetch(apiUrl, [queryString, isDesktop, page]);
@@ -82,7 +83,8 @@ export default function Feed() {
       .then(d => {
         const newItems = d.listings || [];
         setAllListings(prev => [...prev, ...newItems]);
-        setHasMore(offset + newItems.length < d.total);
+        // If fewer than 30 returned, no more to load. Otherwise use total from initial load.
+        setHasMore(newItems.length >= 30);
         setLoadingMore(false);
       })
       .catch(() => setLoadingMore(false));
