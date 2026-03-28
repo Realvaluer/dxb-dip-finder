@@ -10,7 +10,7 @@ export default function ListingDetail() {
   const { data: listing, loading, error } = useFetch(`/api/listings/${id}`, [id]);
 
   useEffect(() => {
-    if (listing) trackPropertyView(listing.id, listing.property_name || listing.community);
+    if (listing) trackPropertyView(listing.id, listing.property_name || listing.community, listing.community, listing.url);
   }, [listing]);
 
   if (loading) {

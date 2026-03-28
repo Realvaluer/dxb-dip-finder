@@ -75,10 +75,11 @@ export function trackClick(buttonName, extra = {}) {
   send('click', { event_data: { button: buttonName, ...extra } });
 }
 
-export function trackPropertyView(propertyId, propertyName) {
+export function trackPropertyView(propertyId, propertyName, community, url) {
   send('property_view', {
     property_id: propertyId,
     property_name: propertyName,
+    event_data: { community: community || null, url: url || null },
   });
 }
 
