@@ -60,7 +60,7 @@ export function initAnalytics() {
     send('session_end', { duration_ms: Date.now() - sessionStart });
   });
 
-  trackPageView();
+  // Don't call trackPageView here — App.jsx calls it on route changes including initial load
 }
 
 export function trackPageView(page) {

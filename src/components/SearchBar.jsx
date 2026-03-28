@@ -3,13 +3,11 @@ import Fuse from 'fuse.js';
 
 // Cache the property list globally so it persists across re-renders/navigations
 let _fuseInstance = null;
-let _loading = false;
 let _loadPromise = null;
 
 function loadFuse() {
   if (_fuseInstance) return Promise.resolve(_fuseInstance);
   if (_loadPromise) return _loadPromise;
-  _loading = true;
   _loadPromise = fetch('/api/property-list')
     .then(r => r.json())
     .then(data => {
@@ -19,19 +17,30 @@ function loadFuse() {
         includeScore: true,
         ignoreLocation: true,
       });
-      _loading = false;
       return _fuseInstance;
     })
-    .catch(() => { _loading = false; return null; });
+    .catch(() => null);
   return _loadPromise;
 }
 
-export default function SearchBar({ value, onChange, onSelectCommunity, onSelectBuilding, activeFilters }) {
+// Simple debounce hook
+function useDebounce(value, delay) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+export default function SearchBar({ value, onChange, onSelectCommunity, onSelectBuilding }) {
   const [local, setLocal] = useState('');
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState({ communities: [], buildings: [] });
   const [open, setOpen] = useState(false);
   const [fuse, setFuse] = useState(_fuseInstance);
   const wrapRef = useRef(null);
+
+  const debouncedQuery = useDebounce(local, 200);
 
   // Load Fuse.js on mount
   useEffect(() => {
@@ -40,28 +49,37 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
 
   useEffect(() => { setLocal(value); }, [value]);
 
-  // Close on click outside
+  // Close on click outside or Escape
   useEffect(() => {
     function handleClickOutside(e) {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
     }
+    function handleEscape(e) {
+      if (e.key === 'Escape') setOpen(false);
+    }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
-  function handleChange(e) {
-    const v = e.target.value;
-    setLocal(v);
-    if (!fuse || v.trim().length < 2) { setResults([]); setOpen(false); return; }
+  // Run Fuse.js search on debounced query (no API calls)
+  useEffect(() => {
+    if (!fuse || debouncedQuery.trim().length < 2) {
+      setResults({ communities: [], buildings: [] });
+      if (debouncedQuery.trim().length < 2) setOpen(false);
+      return;
+    }
 
-    // Instant client-side fuzzy search
-    const hits = fuse.search(v.trim()).slice(0, 30).map(r => r.item);
+    const hits = fuse.search(debouncedQuery.trim()).slice(0, 30).map(r => r.item);
 
-    // Group into communities and buildings
     const commMap = {};
     const bldgMap = {};
     for (const h of hits) {
-      if (h.community && h.community.toLowerCase().includes(v.trim().toLowerCase())) {
+      // Only show community if the search term matches the community name
+      if (h.community && h.community.toLowerCase().includes(debouncedQuery.trim().toLowerCase())) {
         if (!commMap[h.community]) commMap[h.community] = 0;
         commMap[h.community] += h.count;
       }
@@ -72,36 +90,26 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
       }
     }
 
-    const communities = Object.entries(commMap)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([label, cnt]) => ({ label, cnt }));
-
-    const buildings = Object.values(bldgMap)
-      .sort((a, b) => b.cnt - a.cnt)
-      .slice(0, 15);
-
-    setResults({ communities, buildings });
+    setResults({
+      communities: Object.entries(commMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([label, cnt]) => ({ label, cnt })),
+      buildings: Object.values(bldgMap).sort((a, b) => b.cnt - a.cnt).slice(0, 15),
+    });
     setOpen(true);
-  }
+  }, [debouncedQuery, fuse]);
 
   function selectCommunity(label) {
     setLocal('');
-    setSuggestionsOpen(true); // keep dropdown open for more selections
+    // Do NOT close dropdown — user may want to add more
     onSelectCommunity(label);
   }
 
   function selectBuilding(label) {
     setLocal('');
-    // Keep dropdown open
+    // Do NOT close dropdown
     onSelectBuilding(label);
   }
 
-  function setSuggestionsOpen(val) {
-    setOpen(val);
-  }
-
-  const hasSuggestions = results && (results.communities?.length > 0 || results.buildings?.length > 0);
+  const hasSuggestions = results.communities.length > 0 || results.buildings.length > 0;
 
   return (
     <div className="px-4 py-2" ref={wrapRef}>
@@ -112,14 +120,14 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
         <input
           type="text"
           value={local}
-          onChange={handleChange}
+          onChange={e => setLocal(e.target.value)}
           onFocus={() => { if (hasSuggestions) setOpen(true); }}
           placeholder="Search building or community..."
           className="w-full bg-card border border-border rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-muted outline-none focus:border-accent/50 transition min-h-[44px]"
         />
         {local && (
           <button
-            onClick={() => { setLocal(''); onChange(''); setResults([]); setOpen(false); }}
+            onClick={() => { setLocal(''); onChange(''); setResults({ communities: [], buildings: [] }); setOpen(false); }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted min-h-[44px] min-w-[44px] flex items-center justify-center -m-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -128,10 +136,10 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
           </button>
         )}
 
-        {/* Dropdown */}
-        {open && results && (
+        {/* Dropdown — scrollable, max 260px */}
+        {open && (hasSuggestions || local.length >= 2) && (
           <div className="absolute left-0 right-0 top-full mt-1 bg-card border border-border rounded-xl shadow-lg z-50 max-h-[260px] overflow-y-auto overflow-x-hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {results.communities?.length > 0 && (
+            {results.communities.length > 0 && (
               <>
                 <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted font-medium">Communities</div>
                 {results.communities.map(s => (
@@ -143,7 +151,7 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
                 ))}
               </>
             )}
-            {results.buildings?.length > 0 && (
+            {results.buildings.length > 0 && (
               <>
                 <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-muted font-medium border-t border-border">Buildings</div>
                 {results.buildings.map(s => (
@@ -156,7 +164,7 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
               </>
             )}
             {!hasSuggestions && local.length >= 2 && (
-              <div className="px-3 py-4 text-xs text-muted text-center">No results for "{local}"</div>
+              <div className="px-3 py-4 text-xs text-muted text-center">No results for &ldquo;{local}&rdquo;</div>
             )}
           </div>
         )}
