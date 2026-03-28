@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
       const session = JSON.parse(stored);
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${session.token}` } })
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) setUser({ ...d, token: session.token }); })
+        .then(d => { if (d) { setUser({ ...d, token: session.token }); identifyUser(d.email || session.email); } })
         .catch(() => {})
         .finally(() => setLoading(false));
     } catch { setLoading(false); }
