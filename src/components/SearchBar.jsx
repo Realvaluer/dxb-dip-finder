@@ -103,6 +103,7 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(!!_propertyList);
   const wrapRef = useRef(null);
+  const keepQueryRef = useRef(false); // true when user just selected an item
 
   const debouncedQuery = useDebounce(local, 200);
 
@@ -110,7 +111,11 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
     loadPropertyList().then(d => { if (d) setLoaded(true); });
   }, []);
 
-  useEffect(() => { setLocal(value); }, [value]);
+  // Sync from parent — but skip if we're keeping the query after a selection
+  useEffect(() => {
+    if (keepQueryRef.current) { keepQueryRef.current = false; return; }
+    setLocal(value);
+  }, [value]);
 
   // Close on click outside or Escape only
   useEffect(() => {
@@ -140,17 +145,16 @@ export default function SearchBar({ value, onChange, onSelectCommunity, onSelect
     setOpen(true);
   }, [debouncedQuery, loaded, activeCommunities, activeBuildings]);
 
-  // FIX 3: Stay open after selection, clear input
+  // FIX 3: Stay open after selection, keep query text for multi-select
   function selectCommunity(label) {
-    setLocal('');
+    keepQueryRef.current = true; // prevent parent value='' from clearing our input
     onSelectCommunity(label);
-    // Don't close — dropdown will update to remove selected item
+    // Don't clear local, don't close — dropdown updates via activeFilters change
   }
 
   function selectBuilding(label) {
-    setLocal('');
+    keepQueryRef.current = true;
     onSelectBuilding(label);
-    // Don't close
   }
 
   const hasSuggestions = results.communities.length > 0 || results.buildings.length > 0;
