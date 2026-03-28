@@ -12,14 +12,17 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const isIncrease = displayPct != null && displayPct > 0;
   const absChangePct = displayPct != null ? Math.abs(displayPct).toFixed(1) : null;
 
-  // Previous Listing (dip data)
+  // Same Listing change (listing_change field — price changed on same listing)
+  const hasSameListing = l.listing_change != null && l.listing_change < 0;
+
+  // Previous Listing (dip data — listing vs. different listing)
   const hasPrevListing = l.change_aed != null && l.change_aed !== 0;
   const prevIsNeg = hasPrevListing && l.change_aed < 0;
 
   // Last Sale/Rent (transaction data)
   const hasLastSale = l.last_sale_price != null;
   const saleIsNeg = hasLastSale && l.last_sale_change != null && l.last_sale_change < 0;
-  const hasAnyComparison = hasPrevListing || hasLastSale;
+  const hasAnyComparison = hasSameListing || hasPrevListing || hasLastSale;
 
   function handleBookmark(e) {
     e.stopPropagation();
@@ -83,9 +86,20 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
         <span className="ml-auto text-[10px] font-mono text-muted">{sourceTag(l.source)}</span>
       </div>
 
+      {/* Line 0: Same Listing (price dropped on same listing) */}
+      {hasSameListing && (
+        <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
+          <span className="font-semibold text-white">Same Listing:</span>{' '}
+          <span className="text-dip-red font-medium">
+            −{formatPrice(Math.abs(l.listing_change))}
+          </span>
+          {l.listing_change_prev_price != null && <> · Prev: {formatPrice(l.listing_change_prev_price)}</>}
+        </div>
+      )}
+
       {/* Line 1: Previous Listing */}
       {hasPrevListing && (
-        <div className="mt-2 pt-2 border-t border-border text-[11px] text-muted">
+        <div className={`${hasSameListing ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
           <span className="font-semibold text-white">Prev Listing:</span>{' '}
           <span className={prevIsNeg ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
             {prevIsNeg ? '−' : '+'}{formatPrice(Math.abs(l.change_aed))}
@@ -98,7 +112,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
 
       {/* Line 2: Last Sale/Rent */}
       {hasLastSale && (
-        <div className={`${hasPrevListing ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
+        <div className={`${(hasSameListing || hasPrevListing) ? 'mt-1' : 'mt-2 pt-2 border-t border-border'} text-[11px] text-muted`}>
           <span className="font-semibold text-white">{l.purpose?.toLowerCase() === 'rent' ? 'Last Rent:' : 'Last Sale:'}</span>{' '}
           <span className={saleIsNeg ? 'text-dip-red font-medium' : 'text-accent font-medium'}>
             {saleIsNeg ? '−' : '+'}{formatPrice(Math.abs(l.last_sale_change))}

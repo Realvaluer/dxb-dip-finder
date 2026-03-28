@@ -385,7 +385,8 @@ function applySort(query, sort) {
     case 'dip_aed':
       return query.order('last_txn_change', { ascending: true, nullsFirst: false });
     case 'listing_change':
-      return query.order('listing_change', { ascending: true, nullsFirst: false });
+      // Show all listings, sort by listing_change ASC (biggest drops first), nulls last
+      return query.not('listing_change', 'is', null).lt('listing_change', 0).order('listing_change', { ascending: true });
     case 'price_asc':
       return query.order('price_aed', { ascending: true });
     case 'price_desc':
