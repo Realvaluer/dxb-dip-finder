@@ -104,7 +104,21 @@ function normalizeName(name) {
 }
 
 function nameTokens(name) {
-  return normalizeName(name).split(/[\s\-]+/).filter(t => t.length > 0);
+  return normalizeName(name).split(/[\s\-]+/).filter(t => t.length >= 4);
+}
+
+// Extract trailing identifier (single letter or number 1-999) from a property name
+function trailingId(name) {
+  if (!name) return null;
+  // Strip " at ..." suffix (e.g. "Elo 3 at Damac Hills 2" → "elo 3")
+  const n = normalizeName(name).replace(/\s+at\s+.*$/, '');
+  const tokens = n.split(/[\s\-]+/);
+  const last = tokens[tokens.length - 1];
+  if (!last) return null;
+  if (/^[a-z]$/.test(last)) return last;
+  // Normalize leading zeros: "06" → "6"
+  if (/^\d{1,3}$/.test(last)) return String(parseInt(last, 10));
+  return null;
 }
 
 // Explicit name overrides: DDF name → RV search tokens
@@ -149,32 +163,39 @@ function namesMatch(ddfName, rvName) {
   // Token overlap: all DDF tokens appear in RV name
   const ddfTokens = nameTokens(ddfName);
   const rvTokens = nameTokens(rvName);
-  if (ddfTokens.length >= 2 && ddfTokens.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) return true;
+  let tokenMatch = false;
+  if (ddfTokens.length >= 2 && ddfTokens.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) tokenMatch = true;
 
   // Reversed word order: "binghatti ghost" ↔ "ghost by binghatti"
-  if (ddfTokens.length >= 2) {
+  if (!tokenMatch && ddfTokens.length >= 2) {
     const ddfReversed = [...ddfTokens].reverse();
-    if (ddfReversed.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) return true;
+    if (ddfReversed.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) tokenMatch = true;
   }
 
-  return false;
+  if (!tokenMatch) return false;
+
+  // Trailing identifier check: if both names end with a letter/number, they must match
+  const ddfId = trailingId(ddfName);
+  const rvId = trailingId(rvName);
+  if (ddfId && rvId && ddfId !== rvId) return false;
+
+  return true;
 }
 
 // ── Size matching ─────────────────────────────────────────────────────────
 
 function matchBySize(listingSize, candidates) {
-  const ls = listingSize || 0;
-  const min20 = ls * 0.8, max20 = ls * 1.2;
-  // ±20% match
-  const m = candidates.find(s => !ls || !s.size_sqft || (s.size_sqft >= min20 && s.size_sqft <= max20));
+  const ls = listingSize;
+  const min15 = ls * 0.85, max15 = ls * 1.15;
+  // ±15% match
+  const m = candidates.find(s => s.size_sqft && s.size_sqft >= min15 && s.size_sqft <= max15);
   if (m) return m;
-  if (!ls) return candidates[0];
-  // Fallback: closest within ±40%
+  // Fallback: closest within ±25%
   let best = null, bd = Infinity;
   for (const s of candidates) {
     if (!s.size_sqft) continue;
     const d = Math.abs(s.size_sqft - ls) / ls;
-    if (d < 0.4 && d < bd) { best = s; bd = d; }
+    if (d < 0.25 && d < bd) { best = s; bd = d; }
   }
   return best;
 }
@@ -237,7 +258,7 @@ async function findMatch(listing, rvData) {
 
   // Filter by: name match + bedrooms
   const candidates = pool.filter(tx => {
-    if (tx.bedrooms !== bed && !(bed === 0 && tx.bedrooms === null)) return false;
+    if (tx.bedrooms === null || tx.bedrooms !== bed) return false;
     if (!tx.property_name) return false;
     return namesMatch(listing.property_name, tx.property_name);
   });
@@ -245,6 +266,7 @@ async function findMatch(listing, rvData) {
   if (candidates.length === 0) return null;
 
   // Already sorted by date desc from the query — pick best by size
+  if (!listing.size_sqft) return null;
   const match = matchBySize(listing.size_sqft, candidates);
   if (!match) return null;
 

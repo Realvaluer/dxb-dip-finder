@@ -156,24 +156,24 @@ async function fetchLastSales(rows) {
     return [...combos.values()];
   }
 
-  // Helper: match listing to best result by ±20% size (relaxed from ±10%)
+  // Helper: match listing to best result by ±15% size
   function matchBySize(listing, candidates) {
-    const listingSize = listing.size_sqft || 0;
-    const minSize = listingSize * 0.8;
-    const maxSize = listingSize * 1.2;
-    // First try ±20% match
+    const listingSize = listing.size_sqft;
+    if (!listingSize) return null;
+    const minSize = listingSize * 0.85;
+    const maxSize = listingSize * 1.15;
+    // First try ±15% match
     const sizeMatch = candidates.find(s => {
-      if (!listingSize || !s.size_sqft) return true;
+      if (!s.size_sqft) return false;
       return s.size_sqft >= minSize && s.size_sqft <= maxSize;
     });
     if (sizeMatch) return sizeMatch;
-    // Fallback: pick closest size if within ±40%
-    if (!listingSize) return candidates[0];
+    // Fallback: pick closest size if within ±25%
     let best = null, bestDiff = Infinity;
     for (const s of candidates) {
       if (!s.size_sqft) continue;
       const diff = Math.abs(s.size_sqft - listingSize) / listingSize;
-      if (diff < 0.4 && diff < bestDiff) { best = s; bestDiff = diff; }
+      if (diff < 0.25 && diff < bestDiff) { best = s; bestDiff = diff; }
     }
     return best;
   }
