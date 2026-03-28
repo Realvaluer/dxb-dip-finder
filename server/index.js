@@ -868,6 +868,49 @@ app.get('/api/search-building', async (req, res) => {
   }
 });
 
+// ── GET /api/property-list — cached distinct properties for client-side Fuse.js search
+let propertyListCache = { data: null, ts: 0 };
+const PROPERTY_LIST_TTL = 60 * 60 * 1000; // 1 hour
+
+app.get('/api/property-list', async (req, res) => {
+  try {
+    if (propertyListCache.data && Date.now() - propertyListCache.ts < PROPERTY_LIST_TTL) {
+      return res.json(propertyListCache.data);
+    }
+
+    // Fetch all property_name + community combos (paginate to get all)
+    const allData = [];
+    let from = 0;
+    while (from < 200000) {
+      const { data } = await supabase
+        .from(TABLE)
+        .select('property_name, community')
+        .eq('is_valid', true)
+        .not('property_name', 'is', null)
+        .range(from, from + 4999);
+      if (!data || data.length === 0) break;
+      allData.push(...data);
+      from += 5000;
+    }
+
+    // Deduplicate and count
+    const combos = {};
+    for (const r of allData) {
+      if (!r.property_name) continue;
+      const key = `${r.property_name}|${r.community || ''}`;
+      if (!combos[key]) combos[key] = { property_name: r.property_name, community: r.community || '', count: 0 };
+      combos[key].count++;
+    }
+
+    const result = Object.values(combos).sort((a, b) => b.count - a.count);
+    propertyListCache = { data: result, ts: Date.now() };
+    res.json(result);
+  } catch (err) {
+    console.error('Property list error:', err);
+    res.status(500).json([]);
+  }
+});
+
 // ── GET /api/health ──────────────────────────────────────────────────────────
 
 app.get('/api/health', async (req, res) => {

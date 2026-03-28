@@ -52,7 +52,7 @@ export default function Feed() {
   // Build API URL based on view mode
   const apiUrl = isDesktop
     ? `/api/listings?${queryString}&limit=${DESKTOP_PAGE_SIZE}&offset=${(page - 1) * DESKTOP_PAGE_SIZE}`
-    : `/api/listings?${queryString}&limit=50`;
+    : `/api/listings?${queryString}&limit=30`;
   const kpiUrl = `/api/kpis?${queryString}`;
 
   const { data: listingsData, loading: listingsLoading, error: listingsError } = useDebouncedFetch(apiUrl, [queryString, isDesktop, page]);
@@ -77,7 +77,7 @@ export default function Feed() {
     if (loadingMore || !hasMore || isDesktop) return;
     setLoadingMore(true);
     const offset = allListings.length;
-    fetch(`/api/listings?${queryString}&limit=50&offset=${offset}`)
+    fetch(`/api/listings?${queryString}&limit=30&offset=${offset}`)
       .then(r => r.json())
       .then(d => {
         const newItems = d.listings || [];

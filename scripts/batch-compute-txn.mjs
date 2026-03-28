@@ -78,11 +78,26 @@ const COMMUNITY_ALIASES = {
   'dubai marina': ['dubai marina'],
   'business bay': ['business bay'],
   'al barari': ['al barari'],
+  'the oasis by emaar': ['the oasis'],
   'al satwa': ['al satwa', 'jumeirah garden city'],
   'mina rashid': ['mina rashid', 'al mina'],
   'dubai south': ['dubai south', 'azizi venice', 'emaar south'],
   'dubai south (dubai world central)': ['dubai south', 'azizi venice', 'emaar south', 'dubai world central'],
   'dubai production city (impz)': ['dubai production city', 'dubai production city (impz)', 'impz'],
+  'the heights country club & wellness': ['the heights', 'the heights country club'],
+  'sheikh zayed road': ['trade center first', 'trade center second', 'al barsha first', 'sheikh zayed road'],
+  'al barsha': ['al barsha first', 'al barsha', 'arjan'],
+  'deira': ['al muteena', 'al muraqqabat', 'deira', 'al rigga', 'naif', 'port saeed'],
+  'bur dubai': ['bur dubai', 'al hamriya', 'al raffa', 'al mankhool'],
+  'the valley': ['the valley'],
+  'damac lagoons': ['damac lagoons'],
+  'tilal al ghaf': ['tilal al ghaf'],
+  'al furjan': ['al furjan'],
+  'majan': ['majan'],
+  'arjan': ['arjan'],
+  'town square': ['town square'],
+  'the views': ['the views'],
+  'al aweer': ['al aweer first', 'al aweer second', 'al aweer'],
 };
 
 function getRvCommunities(ddfCommunity) {
@@ -104,21 +119,7 @@ function normalizeName(name) {
 }
 
 function nameTokens(name) {
-  return normalizeName(name).split(/[\s\-]+/).filter(t => t.length >= 4);
-}
-
-// Extract trailing identifier (single letter or number 1-999) from a property name
-function trailingId(name) {
-  if (!name) return null;
-  // Strip " at ..." suffix (e.g. "Elo 3 at Damac Hills 2" → "elo 3")
-  const n = normalizeName(name).replace(/\s+at\s+.*$/, '');
-  const tokens = n.split(/[\s\-]+/);
-  const last = tokens[tokens.length - 1];
-  if (!last) return null;
-  if (/^[a-z]$/.test(last)) return last;
-  // Normalize leading zeros: "06" → "6"
-  if (/^\d{1,3}$/.test(last)) return String(parseInt(last, 10));
-  return null;
+  return normalizeName(name).split(/[\s\-]+/).filter(t => t.length > 0);
 }
 
 // Explicit name overrides: DDF name → RV search tokens
@@ -128,10 +129,12 @@ const NAME_OVERRIDES = {
   'the address sky view tower 2': 'address residence sky',
   'the address residences dubai opera tower 1': 'address residence dubai opera',
   'the address residences dubai opera tower 2': 'address residence dubai opera',
-  'maple at dubai hills estate 1': 'maple townhouses 1',
-  'maple at dubai hills estate 2': 'maple townhouses 2',
-  'maple at dubai hills estate 3': 'maple townhouses 3',
+  'maple at dubai hills estate 1': 'maple townhouses',
+  'maple at dubai hills estate 2': 'maple townhouses',
+  'maple at dubai hills estate 3': 'maple townhouses',
   'district one villas': 'district one',
+  'district one phase iii': 'district one',
+  'district one west phase i': 'district one west villas',
   'binghatti ghost': 'ghost by binghatti',
   'sls dubai hotel & residences': 'sls dubai hotel',
   'six senses hotel': 'six senses residences',
@@ -141,6 +144,86 @@ const NAME_OVERRIDES = {
   'passo by beyond': 'passo',
   'peninsula four the plaza': 'peninsula four',
   'baystar by vida': 'baystar by vida',
+  // Damac Lagoons
+  'caya 1': 'caya villas',
+  'caya 2': 'caya villas',
+  'malta': 'malta',
+  'nice': 'nice',
+  'ibiza': 'ibiza',
+  'costa brava 1': 'costa brava 1',
+  'costa brava 2': 'costa brava 2',
+  'santorini': 'santorini',
+  'portofino': 'portofino',
+  'morocco by damac': 'morocco',
+  // Arabian Ranches 3
+  'bliss 1': 'bliss townhouses',
+  'bliss 2': 'bliss townhouses',
+  // The Valley
+  'avelia': 'the valley - avelia',
+  'ovelle': 'the valley - ovelle',
+  // The Oasis by Emaar
+  'the oasis - palmiera': 'the oasis - palmiera',
+  'the oasis - mirage': 'the oasis - mirage',
+  'mareva 2 the oasis': 'the oasis - mareva',
+  'palace villas - ostra': 'ostra palace villas',
+  // Al Furjan
+  'al furjan west': 'murooj al furjan west',
+  'murooj al furjan east': 'murooj al furjan',
+  'pg one': 'pg one at al furjan',
+  'tilal al furjan': 'tilal al furjan',
+  // Barari / Majan
+  'barari gate by ade': 'bararigate by ade',
+  'divine al barari': 'divine al barari',
+  // MBR City
+  'crest grande': 'crest grande',
+  'mag eye': 'mag eye townhouses',
+  'elie saab vie townhouses': 'elie saab vie',
+  // The Heights
+  'salva': 'salva at the heights country club',
+  // Camelia
+  'camelia': 'camelia at damac hills 2',
+  // Arjan
+  'binghatti hillside': 'binghatti hillside',
+  'binghatti hillcrest': 'binghatti hillcrest',
+  'binghatti titania': 'binghatti titania',
+  'binghatti etherea': 'binghatti etherea',
+  'binghatti luxuria': 'binghatti luxuria',
+  'binghatti cullinan': 'binghatti cullinan',
+  'binghatti ivory': 'binghatti ivory',
+  'binghatti vintage': 'binghatti vintage',
+  // JVC/JVT
+  'auresta tower': 'auresta tower',
+  'sky gate tower': 'sky gate tower',
+  'luma park views': 'luma park views',
+  'rise residences': 'rise residences',
+  'samana barari heights': 'samana barari heights',
+  'skyz by danube': 'skyz by danube',
+  // Dubai Land
+  '09 life residences': '09 life residences',
+  'reportage hills': 'reportage hills',
+  // Tilal Al Ghaf
+  'aura gardens': 'aura gardens',
+  'elan': 'elan',
+  // Sheikh Zayed Road
+  'park place tower': 'ascott park place tower',
+  'duja tower': 'duja tower',
+  'al salam tower fc': 'al salam tower',
+  // Palace Beach
+  'palace beach residence tower 1': 'palace beach residence',
+  'palace beach residence tower 2': 'palace beach residence',
+  // The Cape
+  'the cape': 'the cape building',
+  // Fairway Villas
+  'fairway villas': 'fairway villas',
+  // The Chedi
+  'the chedi private residences': 'the chedi private residences',
+  // Jumeirah Garden City
+  'jumeirah garden city': 'jumeirah garden city',
+  // Al Barsha areas
+  'al barsha south 1': 'al barsha south',
+  'al barsha south 2': 'al barsha south',
+  'al barsha 2 villas': 'al barsha',
+  'al barsha 3 villas': 'al barsha',
 };
 
 // Check if DDF name matches RV name using fuzzy token matching
@@ -163,41 +246,37 @@ function namesMatch(ddfName, rvName) {
   // Token overlap: all DDF tokens appear in RV name
   const ddfTokens = nameTokens(ddfName);
   const rvTokens = nameTokens(rvName);
-  let tokenMatch = false;
-  if (ddfTokens.length >= 2 && ddfTokens.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) tokenMatch = true;
+  if (ddfTokens.length >= 2 && ddfTokens.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) return true;
 
   // Reversed word order: "binghatti ghost" ↔ "ghost by binghatti"
-  if (!tokenMatch && ddfTokens.length >= 2) {
+  if (ddfTokens.length >= 2) {
     const ddfReversed = [...ddfTokens].reverse();
-    if (ddfReversed.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) tokenMatch = true;
+    if (ddfReversed.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) return true;
   }
 
-  if (!tokenMatch) return false;
-
-  // Trailing identifier check: if both names end with a letter/number, they must match
-  const ddfId = trailingId(ddfName);
-  const rvId = trailingId(rvName);
-  if (ddfId && rvId && ddfId !== rvId) return false;
-
-  return true;
+  return false;
 }
 
 // ── Size matching ─────────────────────────────────────────────────────────
 
 function matchBySize(listingSize, candidates) {
-  const ls = listingSize;
-  const min15 = ls * 0.85, max15 = ls * 1.15;
-  // ±15% match
-  const m = candidates.find(s => s.size_sqft && s.size_sqft >= min15 && s.size_sqft <= max15);
-  if (m) return m;
-  // Fallback: closest within ±25%
+  if (!candidates.length) return null;
+  const ls = listingSize || 0;
+  if (!ls) return candidates[0]; // no size info — just take most recent
+
+  // ±30% match first
+  const min30 = ls * 0.7, max30 = ls * 1.3;
+  const m30 = candidates.find(s => !s.size_sqft || (s.size_sqft >= min30 && s.size_sqft <= max30));
+  if (m30) return m30;
+
+  // Fallback: closest within ±60%
   let best = null, bd = Infinity;
   for (const s of candidates) {
     if (!s.size_sqft) continue;
     const d = Math.abs(s.size_sqft - ls) / ls;
-    if (d < 0.25 && d < bd) { best = s; bd = d; }
+    if (d < 0.6 && d < bd) { best = s; bd = d; }
   }
-  return best;
+  return best || candidates[0]; // if nothing within ±60%, take most recent anyway
 }
 
 // ── Pre-load RV data for a community ──────────────────────────────────────
@@ -254,11 +333,14 @@ async function loadRvCommunity(rvCommunityName) {
 async function findMatch(listing, rvData) {
   const isSale = listing.purpose?.toLowerCase() === 'sale';
   const pool = isSale ? rvData.sales : rvData.rentals;
-  const bed = parseInt(listing.bedrooms, 10);
+  const rawBed = listing.bedrooms;
+  const bed = (rawBed === null || rawBed === '' || rawBed === 'Studio' || rawBed === 'studio') ? 0 : parseInt(rawBed, 10);
+  const bedNum = isNaN(bed) ? 0 : bed;
 
   // Filter by: name match + bedrooms
   const candidates = pool.filter(tx => {
-    if (tx.bedrooms === null || tx.bedrooms !== bed) return false;
+    const txBed = tx.bedrooms === null ? 0 : tx.bedrooms;
+    if (txBed !== bedNum) return false;
     if (!tx.property_name) return false;
     return namesMatch(listing.property_name, tx.property_name);
   });
@@ -266,7 +348,6 @@ async function findMatch(listing, rvData) {
   if (candidates.length === 0) return null;
 
   // Already sorted by date desc from the query — pick best by size
-  if (!listing.size_sqft) return null;
   const match = matchBySize(listing.size_sqft, candidates);
   if (!match) return null;
 
@@ -286,12 +367,22 @@ async function main() {
 
   // Step 1: Get all unique communities from DDF
   console.log('Loading DDF communities...');
-  const { data: commData } = await supabase.from(TABLE)
-    .select('community')
-    .eq('is_valid', true)
-    .is('last_txn_price', null)
-    .limit(50000);
-  const communities = [...new Set((commData || []).map(r => r.community).filter(Boolean))].sort();
+  // Supabase default limit is 1000 rows — must paginate with explicit count
+  const allComms = new Set();
+  let commFrom = 0;
+  while (true) {
+    const { data: commBatch, error: commErr } = await supabase.from(TABLE)
+      .select('community', { count: 'exact' })
+      .eq('is_valid', true)
+      .is('last_txn_price', null)
+      .range(commFrom, commFrom + 999);
+    if (commErr) { console.log('Community fetch error:', commErr.message); break; }
+    if (!commBatch || commBatch.length === 0) break;
+    commBatch.forEach(r => { if (r.community) allComms.add(r.community); });
+    if (commBatch.length < 1000) break;
+    commFrom += 1000;
+  }
+  const communities = [...allComms].sort();
   console.log(`Found ${communities.length} communities to process`);
 
   // Step 2: Process each community
@@ -326,7 +417,7 @@ async function main() {
       // Match each listing
       const updates = [];
       for (const listing of rows) {
-        if (!listing.property_name || listing.bedrooms == null) continue;
+        if (!listing.property_name) continue;
         const match = await findMatch(listing, rvData);
         if (match) {
           const change = listing.price_aed - match.price;
