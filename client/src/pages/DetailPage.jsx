@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { fetchListing } from '../api/client';
+import SEO from '../components/SEO';
 import DipBadge from '../components/ui/DipBadge';
 import SkeletonCard from '../components/ui/SkeletonCard';
 import ErrorState from '../components/ui/ErrorState';
@@ -65,6 +66,7 @@ export default function DetailPage() {
 
   return (
     <div className="flex flex-col pb-8">
+      <SEO title={property_name || location} description={`${property_name || location} — view price history and comparable transactions.`} noindex={true} />
       {/* Back row */}
       <div className="flex items-center justify-between px-4 py-3">
         <Link to="/" className="flex items-center gap-1 text-sm text-brand-400">
@@ -120,8 +122,8 @@ export default function DetailPage() {
         ))}
       </div>
 
-      {/* Dip 1 — vs Prior Listing */}
-      {dipPct != null && (
+      {/* Dip 1 — vs Prior Listing (only show with full context) */}
+      {dipPct != null && prevPrice != null && prevDate != null && (
         <>
           <div className="mx-4 border-t border-brand-800 my-2" />
           <div className="px-4 my-4">

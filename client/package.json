@@ -4,13 +4,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/generate-sitemap.js && vite build",
+    "generate-sitemap": "node scripts/generate-sitemap.js",
     "preview": "vite preview"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
+    "react-helmet-async": "^3.0.0",
+    "react-router-dom": "^6.26.0",
+    "sitemap": "^8.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

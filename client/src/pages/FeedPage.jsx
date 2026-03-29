@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import SEO from '../components/SEO';
 import TopBar from '../components/layout/TopBar';
 import BottomSheet from '../components/layout/BottomSheet';
 import SearchInput from '../components/ui/SearchInput';
@@ -10,6 +11,34 @@ import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import useListings from '../hooks/useListings';
 import { fetchAreas } from '../api/client';
+
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'DXB Dip Finder',
+  url: 'https://dxbdipfinder.com',
+  description: 'Track property price drops across 20 Dubai communities daily. Find below-market-value deals updated from PropertyFinder and Bayut.',
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: 'https://dxbdipfinder.com/?q={search_term_string}'
+    },
+    'query-input': 'required name=search_term_string'
+  }
+};
+
+const orgSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'DXB Dip Finder',
+  url: 'https://dxbdipfinder.com',
+  logo: 'https://dxbdipfinder.com/logo.png',
+  sameAs: [
+    'https://twitter.com/dxbdipfinder',
+    'https://www.instagram.com/dxbdipfinder'
+  ]
+};
 
 export default function FeedPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -32,6 +61,20 @@ export default function FeedPage() {
 
   return (
     <div className="flex flex-col gap-3 pb-6">
+      <SEO
+        title="Find Dubai Property Price Drops — Live Deal Tracker"
+        description="DXB Dip Finder tracks property price reductions across 20 Dubai communities daily. Find below-market deals in JVC, Business Bay, Dubai Marina, Downtown and more."
+        canonical="/"
+        keywords={[
+          'Dubai property price drop',
+          'Dubai real estate deals',
+          'below market value property Dubai',
+          'motivated seller Dubai',
+          'undervalued property Dubai',
+          'Dubai property price reduced'
+        ]}
+        structuredData={[websiteSchema, orgSchema]}
+      />
       <TopBar onFilterClick={() => setSheetOpen(true)} />
 
       <div className="px-4">
