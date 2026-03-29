@@ -48,8 +48,8 @@ const COMMUNITY_ALIASES = {
   'culture village': ['culture village', 'al jaddaf'],
   'dubai investment park (dip)': ['dubai investment park'],
   'dubai land residence complex': ['dubai land residence complex', 'dubailand residence complex'],
-  'dubai land': ['dubailand', 'dubai land'],
-  'dubailand': ['dubailand', 'dubai land'],
+  'dubai land': ['dubailand', 'dubai land', 'villanova', 'rukan', 'remraam'],
+  'dubailand': ['dubailand', 'dubai land', 'villanova', 'rukan', 'remraam'],
 
   // Name mismatches between DDF and RV
   'mohammed bin rashid city': ['district one', 'district seven', 'district eleven', 'sobha hartland', 'mohammed bin rashid city', 'meydan', 'meydan one'],

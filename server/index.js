@@ -237,8 +237,12 @@ async function fetchLastSales(rows) {
   // Community aliases: DDF name → also try these in RV
   const COMMUNITY_ALIASES = {
     'dubai south': ['azizi venice', 'dubai south'],
+    'dubai south (dubai world central)': ['azizi venice', 'dubai south', 'dubai world central'],
     'downtown dubai': ['downtown dubai', 'business bay'], // SLS is in BB in RV
     "za'abeel": ['zaabeel first', 'zaabeel second', 'zaabeel'],
+    'dubai land': ['dubailand', 'dubai land', 'villanova', 'rukan', 'remraam'],
+    'al jaddaf': ['al jadaf', 'al jaddaf', 'dubai healthcare city phase 2'],
+    'al aweer': ['al aweer first', 'al aweer second', 'al aweer'],
   };
 
   // Build community pattern: check aliases, strip special chars
