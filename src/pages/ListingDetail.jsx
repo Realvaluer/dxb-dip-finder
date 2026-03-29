@@ -46,7 +46,7 @@ export default function ListingDetail() {
   const l = listing;
   const isDecrease = l.change_pct != null && l.change_pct < 0;
   const isIncrease = l.change_pct != null && l.change_pct > 0;
-  const hasChange = isDecrease || isIncrease;
+  const hasChange = (isDecrease || isIncrease) && l.previous_price != null && l.price_changed_at != null;
   const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
   const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
   const aedPerSqft = l.size_sqft ? Math.round(l.price_aed / l.size_sqft) : null;

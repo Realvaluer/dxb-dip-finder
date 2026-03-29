@@ -98,6 +98,8 @@ const COMMUNITY_ALIASES = {
   'town square': ['town square'],
   'the views': ['the views'],
   'al aweer': ['al aweer first', 'al aweer second', 'al aweer'],
+  'jumeirah park': ['jumeirah park'],
+  'jebel ali': ['jebel ali first', 'jebel ali downtown', 'jebel ali'],
 };
 
 function getRvCommunities(ddfCommunity) {

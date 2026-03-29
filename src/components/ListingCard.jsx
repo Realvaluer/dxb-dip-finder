@@ -16,7 +16,9 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const hasSameListing = l.listing_change != null && l.listing_change < 0;
 
   // Previous Listing (dip data — listing vs. different listing)
-  const hasPrevListing = l.change_aed != null && l.change_aed !== 0;
+  // Only show if ALL context fields are present — never show just the AED diff alone
+  const hasPrevListing = l.change_aed != null && l.change_aed !== 0
+    && l.previous_price != null && l.dip_prev_size != null && l.price_changed_at != null;
   const prevIsNeg = hasPrevListing && l.change_aed < 0;
 
   // Last Sale/Rent (transaction data)

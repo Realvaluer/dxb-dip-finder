@@ -96,12 +96,13 @@ function mapRow(row, refData, saleData) {
     change_pct: row.dip_pct != null && row.dip_pct !== 0 ? Math.round(row.dip_pct * 10) / 10 : null,
     change_aed: row.dip_price != null && row.dip_price !== 0 ? row.dip_price : null,
     // Previous listing data — prefer dip_prev_* columns, fallback to ref lookup
-    previous_price: row.dip_prev_price || (ref ? ref.price_aed : null),
-    price_changed_at: row.dip_prev_date || (ref ? ref.date_listed : null),
-    previous_url: row.dip_prev_url || (ref ? ref.url : null),
-    dip_prev_source: row.dip_prev_source || (ref ? ref.source : null),
-    dip_prev_size: row.dip_prev_size || (ref ? ref.size_sqft : null),
-    dip_prev_furnished: row.dip_prev_furnished || (ref ? ref.furnished : null),
+    // Only include prev data if we have at least the price — never show partial context
+    previous_price: row.dip_prev_price || (ref ? ref.price_aed : null) || null,
+    price_changed_at: (row.dip_prev_price || ref) ? (row.dip_prev_date || (ref ? ref.date_listed : null)) : null,
+    previous_url: (row.dip_prev_price || ref) ? (row.dip_prev_url || (ref ? ref.url : null)) : null,
+    dip_prev_source: (row.dip_prev_price || ref) ? (row.dip_prev_source || (ref ? ref.source : null)) : null,
+    dip_prev_size: (row.dip_prev_price || ref) ? (row.dip_prev_size || (ref ? ref.size_sqft : null)) : null,
+    dip_prev_furnished: (row.dip_prev_price || ref) ? (row.dip_prev_furnished || (ref ? ref.furnished : null)) : null,
     // Listing vs Last Transaction — prefer pre-computed DB columns, fallback to runtime lookup
     last_sale_price: row.last_txn_price || (sale ? sale.sale_price : null),
     last_sale_date: row.last_txn_date || (sale ? sale.sale_date : null),
@@ -243,6 +244,8 @@ async function fetchLastSales(rows) {
     'dubai land': ['dubailand', 'dubai land', 'villanova', 'rukan', 'remraam'],
     'al jaddaf': ['al jadaf', 'al jaddaf', 'dubai healthcare city phase 2'],
     'al aweer': ['al aweer first', 'al aweer second', 'al aweer'],
+    'jumeirah park': ['jumeirah park'],
+    'jebel ali': ['jebel ali first', 'jebel ali downtown', 'jebel ali'],
   };
 
   // Build community pattern: check aliases, strip special chars
