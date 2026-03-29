@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useFetch } from '../hooks/useApi';
+import SEO from '../components/SEO';
 import { formatPrice, formatDate, sourceTag } from '../utils';
 import { trackPropertyView, trackClick } from '../lib/analytics';
 
@@ -64,6 +65,7 @@ export default function ListingDetail() {
 
   return (
     <div className="min-h-screen bg-bg pb-8">
+      <SEO title={l.property_name || l.community} description={`${l.property_name || l.community} — view price history and comparable transactions.`} noindex={true} />
       {/* Back row */}
       <div className="sticky top-0 z-30 bg-bg/95 backdrop-blur-sm px-4 py-3 flex items-center justify-between border-b border-border">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-accent text-sm min-h-[44px]">

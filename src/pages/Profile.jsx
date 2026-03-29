@@ -1,4 +1,5 @@
 import { useAuth } from '../hooks/useAuth';
+import SEO from '../components/SEO';
 import BottomNav from '../components/BottomNav';
 import { formatDate } from '../utils';
 
@@ -7,6 +8,7 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-bg pb-20">
+      <SEO title="Profile" description="Your DXB Dip Finder profile." noindex={true} />
       <div className="sticky top-0 z-30 bg-bg/95 backdrop-blur-sm px-4 py-3 border-b border-border">
         <h1 className="text-lg font-bold">Profile</h1>
       </div>

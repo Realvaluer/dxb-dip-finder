@@ -3,6 +3,7 @@ import useFilters from '../hooks/useFilters';
 import useMediaQuery from '../hooks/useMediaQuery';
 import useBookmarks from '../hooks/useBookmarks';
 import { useFetch, useDebouncedFetch } from '../hooks/useApi';
+import SEO from '../components/SEO';
 import TopBar from '../components/TopBar';
 import SearchBar from '../components/SearchBar';
 import KPICards from '../components/KPICards';
@@ -31,6 +32,34 @@ const PURPOSE_OPTIONS = [
 ];
 
 const DESKTOP_PAGE_SIZE = 100;
+
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'DXB Dip Finder',
+  url: 'https://dxbdipfinder.com',
+  description: 'Track property price drops across 20 Dubai communities daily. Find below-market-value deals updated from PropertyFinder and Bayut.',
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: 'https://dxbdipfinder.com/?q={search_term_string}'
+    },
+    'query-input': 'required name=search_term_string'
+  }
+};
+
+const orgSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'DXB Dip Finder',
+  url: 'https://dxbdipfinder.com',
+  logo: 'https://dxbdipfinder.com/logo.png',
+  sameAs: [
+    'https://twitter.com/dxbdipfinder',
+    'https://www.instagram.com/dxbdipfinder'
+  ]
+};
 
 export default function Feed() {
   const { filters, setFilter, setFilters, resetFilters, activeFilterCount, queryString } = useFilters();
@@ -125,6 +154,20 @@ export default function Feed() {
 
   return (
     <div className={`min-h-screen bg-bg ${isDesktop ? 'pb-4' : 'pb-20'}`}>
+      <SEO
+        title="Find Dubai Property Price Drops — Live Deal Tracker"
+        description="DXB Dip Finder tracks property price reductions across 20 Dubai communities daily. Find below-market deals in JVC, Business Bay, Dubai Marina, Downtown and more."
+        canonical="/"
+        keywords={[
+          'Dubai property price drop',
+          'Dubai real estate deals',
+          'below market value property Dubai',
+          'motivated seller Dubai',
+          'undervalued property Dubai',
+          'Dubai property price reduced'
+        ]}
+        structuredData={[websiteSchema, orgSchema]}
+      />
       <TopBar
         onFilterClick={() => setSheetOpen(true)}
         activeFilterCount={activeFilterCount}

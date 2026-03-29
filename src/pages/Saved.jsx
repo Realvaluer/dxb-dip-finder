@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import useBookmarks from '../hooks/useBookmarks';
+import SEO from '../components/SEO';
 import ListingCard from '../components/ListingCard';
 import BottomNav from '../components/BottomNav';
 import { SkeletonCards } from '../components/Skeleton';
@@ -22,6 +23,7 @@ export default function Saved() {
 
   return (
     <div className="min-h-screen bg-bg pb-20">
+      <SEO title="Saved Listings" description="Your saved property listings." noindex={true} />
       <div className="sticky top-0 z-30 bg-bg/95 backdrop-blur-sm px-4 py-3 border-b border-border">
         <h1 className="text-lg font-bold">Saved Listings</h1>
       </div>
