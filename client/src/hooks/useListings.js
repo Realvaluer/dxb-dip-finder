@@ -38,7 +38,7 @@ export default function useListings() {
     fetchListings(getParams())
       .then(res => {
         if (cancelled) return;
-        setListings(res.data);
+        setListings(res.listings);
         setTotal(res.total);
         setLoading(false);
       })
@@ -58,7 +58,7 @@ export default function useListings() {
 
     fetchListings({ ...getParams(), offset: newOffset })
       .then(res => {
-        setListings(prev => [...prev, ...res.data]);
+        setListings(prev => [...prev, ...res.listings]);
         setOffset(newOffset);
         setLoadingMore(false);
       })
