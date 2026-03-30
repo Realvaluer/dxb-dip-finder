@@ -170,22 +170,30 @@ async function fetchLastSales(rows) {
   }
 
   // Helper: match listing to best result by ±15% size
+  // For villas/townhouses, prefer RV land_size over size_sqft since DDF portals
+  // often report land/plot size while RV size_sqft is built-up area.
   function matchBySize(listing, candidates) {
     const listingSize = listing.size_sqft;
     if (!listingSize) return null;
+    const lType = (listing.type || '').toLowerCase();
+    const isVilla = lType.includes('villa') || lType.includes('townhouse') || lType.includes('land');
+    const rvSize = (c) => (isVilla && c.land_size) ? c.land_size : c.size_sqft;
+
     const minSize = listingSize * 0.85;
     const maxSize = listingSize * 1.15;
     // First try ±15% match
     const sizeMatch = candidates.find(s => {
-      if (!s.size_sqft) return false;
-      return s.size_sqft >= minSize && s.size_sqft <= maxSize;
+      const sz = rvSize(s);
+      if (!sz) return false;
+      return sz >= minSize && sz <= maxSize;
     });
     if (sizeMatch) return sizeMatch;
     // Fallback: pick closest size if within ±25%
     let best = null, bestDiff = Infinity;
     for (const s of candidates) {
-      if (!s.size_sqft) continue;
-      const diff = Math.abs(s.size_sqft - listingSize) / listingSize;
+      const sz = rvSize(s);
+      if (!sz) continue;
+      const diff = Math.abs(sz - listingSize) / listingSize;
       if (diff < 0.25 && diff < bestDiff) { best = s; bestDiff = diff; }
     }
     return best;
@@ -311,7 +319,7 @@ async function fetchLastSales(rows) {
       const data = await queryWithFallbacks(
         'rv_sales', namePattern, combo.community, bed,
         { or: 'subtype.eq.Sale,subtype.eq.Pre-registration' },
-        'id, price, price_sqft, size_sqft, date, bedrooms, subtype'
+        'id, price, price_sqft, size_sqft, land_size, date, bedrooms, subtype'
       );
       return data.filter(isCleanSale).map(r => ({ ...r, _type: r.subtype }));
     }, 'sale'),
@@ -321,7 +329,7 @@ async function fetchLastSales(rows) {
       const data = await queryWithFallbacks(
         'rv_rentals', namePattern, combo.community, bed,
         { property_category: 'Residential' },
-        'id, price, price_sqft, size_sqft, date, bedrooms'
+        'id, price, price_sqft, size_sqft, land_size, date, bedrooms'
       );
       return data.filter(isCleanRental).map(r => ({ ...r, _type: 'Rent listing' }));
     }, 'rent'),

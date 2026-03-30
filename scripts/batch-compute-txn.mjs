@@ -275,21 +275,35 @@ function isCleanRental(tx) {
 
 // ── Size matching ─────────────────────────────────────────────────────────
 
-function matchBySize(listingSize, candidates) {
+// For villas/townhouses, DDF portals report either land size or built-up area
+// inconsistently. RV (DLD) stores built-up in size_sqft and plot in land_size.
+// When matching villas, prefer RV land_size for comparison since DDF size_sqft
+// is more likely to be land/plot size from the portal listing.
+function matchBySize(listingSize, candidates, isVilla = false) {
   if (!candidates.length) return null;
   const ls = listingSize || 0;
   if (!ls) return candidates[0]; // no size info — just take most recent
 
+  // Pick the right RV size field for comparison
+  const rvSize = (c) => {
+    if (isVilla && c.land_size) return c.land_size;
+    return c.size_sqft;
+  };
+
   // ±15% match first
   const min15 = ls * 0.85, max15 = ls * 1.15;
-  const m = candidates.find(s => s.size_sqft && s.size_sqft >= min15 && s.size_sqft <= max15);
+  const m = candidates.find(s => {
+    const sz = rvSize(s);
+    return sz && sz >= min15 && sz <= max15;
+  });
   if (m) return m;
 
   // Fallback: closest within ±25%
   let best = null, bd = Infinity;
   for (const s of candidates) {
-    if (!s.size_sqft) continue;
-    const d = Math.abs(s.size_sqft - ls) / ls;
+    const sz = rvSize(s);
+    if (!sz) continue;
+    const d = Math.abs(sz - ls) / ls;
     if (d < 0.25 && d < bd) { best = s; bd = d; }
   }
   return best;
@@ -308,7 +322,7 @@ async function loadRvCommunity(rvCommunityName) {
   let salesOffset = 0;
   while (true) {
     const { data } = await salesDb.from('rv_sales')
-      .select('property_name, bedrooms, size_sqft, price, price_sqft, date, subtype')
+      .select('property_name, bedrooms, size_sqft, land_size, price, price_sqft, date, subtype')
       .eq('is_valid', true)
       .or('subtype.eq.Sale,subtype.eq.Pre-registration')
       .ilike('community_name', `%${key}%`)
@@ -326,7 +340,7 @@ async function loadRvCommunity(rvCommunityName) {
   let rentalOffset = 0;
   while (true) {
     const { data } = await salesDb.from('rv_rentals')
-      .select('property_name, bedrooms, size_sqft, price, price_sqft, date')
+      .select('property_name, bedrooms, size_sqft, land_size, price, price_sqft, date')
       .eq('is_valid', true)
       .eq('property_category', 'Residential')
       .ilike('community_name', `%${key}%`)
@@ -365,8 +379,12 @@ async function findMatch(listing, rvData) {
 
   if (candidates.length === 0) return null;
 
+  // Detect villa/townhouse — DDF type field varies: "Villa", "Townhouse", "Land"
+  const lType = (listing.type || '').toLowerCase();
+  const isVilla = lType.includes('villa') || lType.includes('townhouse') || lType.includes('land');
+
   // Already sorted by date desc from the query — pick best by size
-  const match = matchBySize(listing.size_sqft, candidates);
+  const match = matchBySize(listing.size_sqft, candidates, isVilla);
   if (!match) return null;
 
   return {
@@ -423,7 +441,7 @@ async function main() {
 
     while (true) {
       const { data: rows, error: rowErr } = await supabase.from(TABLE)
-        .select('id, property_name, community, bedrooms, size_sqft, purpose, price_aed')
+        .select('id, property_name, community, bedrooms, size_sqft, type, purpose, price_aed')
         .eq('is_valid', true)
         .eq('community', community)
         .is('last_txn_price', null)
