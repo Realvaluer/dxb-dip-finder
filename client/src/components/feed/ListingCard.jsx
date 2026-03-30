@@ -76,7 +76,7 @@ export default function ListingCard({ listing }) {
       {/* Dip rows */}
       <div className="flex flex-col gap-1">
         {/* Dip 1 — vs Prior Listing (only show with full context) */}
-        {dipPct != null && prevPrice != null && prevDate != null && (
+        {dipAed != null && dipAed !== 0 && prevPrice != null && (
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-gray-600 text-[10px] w-[70px] shrink-0">vs Prior</span>
             <span className={dipAed < 0 ? 'text-red-400' : 'text-green-400'}>
