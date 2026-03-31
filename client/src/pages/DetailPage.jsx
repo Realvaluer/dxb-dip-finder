@@ -127,7 +127,7 @@ export default function DetailPage() {
         <>
           <div className="mx-4 border-t border-brand-800 my-2" />
           <div className="px-4 my-4">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-gray-500 mb-3">Price History</p>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-gray-500 mb-3">Same Listing Price History</p>
             <div className={`flex ${price_history.length > 3 ? 'flex-col gap-1' : 'items-center gap-0'} flex-wrap`}>
               {price_history.map((h, i) => {
                 const isCurrent = h.id === listing.id;

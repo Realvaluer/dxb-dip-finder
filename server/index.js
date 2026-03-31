@@ -601,38 +601,23 @@ app.get('/api/listings/:id', async (req, res) => {
 
     if (error || !row) return res.status(404).json({ error: 'Not found' });
 
-    // Build price chain: all listings for same property in last 180 days
+    // Build price chain: same reference_no + source (real price history of one listing)
     let priceChain = [];
-    if (row.property_name && row.community && row.bedrooms != null) {
-      const cutoff = new Date(new Date(row.date_listed || row.scraped_at).getTime() - 180 * 86400000).toISOString().slice(0, 10);
-      let chainQuery = supabase
+    if (row.reference_no) {
+      const { data: refHistory } = await supabase
         .from(TABLE)
-        .select('id, price_aed, date_listed, listing_change, source, reference_no, size_sqft')
-        .eq('property_name', row.property_name)
-        .eq('community', row.community)
-        .eq('bedrooms', row.bedrooms)
-        .eq('purpose', row.purpose)
-        .gte('date_listed', cutoff)
-        .order('date_listed', { ascending: true })
-        .order('price_aed', { ascending: true });
+        .select('id, price_aed, date_listed, listing_change, scraped_at')
+        .eq('reference_no', row.reference_no)
+        .eq('source', row.source)
+        .order('scraped_at', { ascending: true });
 
-      const { data: siblings } = await chainQuery;
-      if (siblings && siblings.length > 0) {
-        // No size filter — same property_name + community + bedrooms + purpose
-        // is already a strong match; reported sizes vary widely between agents
-        const filtered = siblings;
-        // Deduplicate by price+date (keep first)
-        const seen = new Set();
-        for (const s of filtered) {
-          const key = `${s.price_aed}|${s.date_listed}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
+      if (refHistory && refHistory.length >= 2) {
+        for (const s of refHistory) {
           priceChain.push({
             id: s.id,
             price: s.price_aed,
             date: s.date_listed,
             change: s.listing_change,
-            source: s.source,
           });
         }
       }

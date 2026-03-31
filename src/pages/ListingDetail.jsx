@@ -138,7 +138,7 @@ export default function ListingDetail() {
         {l.price_history && l.price_history.length >= 2 && (
           <>
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Price history</div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Same listing price history</div>
               <div className="flex items-center flex-wrap gap-y-2">
                 {l.price_history.map((h, i) => {
                   const isCurrent = h.id === l.id;
