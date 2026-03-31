@@ -122,6 +122,43 @@ export default function DetailPage() {
         ))}
       </div>
 
+      {/* Price History Chain */}
+      {price_history.length >= 2 && (
+        <>
+          <div className="mx-4 border-t border-brand-800 my-2" />
+          <div className="px-4 my-4">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-gray-500 mb-3">Price History</p>
+            <div className={`flex ${price_history.length > 3 ? 'flex-col gap-1' : 'items-center gap-0'} flex-wrap`}>
+              {price_history.map((h, i) => {
+                const isCurrent = h.id === listing.id;
+                const priceM = h.price >= 1_000_000 ? `${(h.price / 1_000_000).toFixed(2)}M` : h.price >= 1_000 ? `${(h.price / 1_000).toFixed(0)}K` : h.price?.toLocaleString();
+                const d = h.date ? new Date(h.date) : null;
+                const dateStr = d ? `${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })} '${String(d.getFullYear()).slice(-2)}` : '';
+                return price_history.length > 3 ? (
+                  <div key={h.id} className={`flex items-center gap-2 ${i > 0 ? '' : ''}`}>
+                    {i > 0 && <span className="text-gray-600 text-xs ml-1">→</span>}
+                    <div className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${isCurrent ? 'bg-brand-700/30 border border-brand-500/30' : 'bg-brand-900/40'}`}>
+                      <span className={`text-sm font-semibold ${isCurrent ? 'text-brand-300' : 'text-gray-400'}`}>AED {priceM}</span>
+                      <span className="text-[10px] text-gray-500">{dateStr}</span>
+                      {isCurrent && <span className="text-[9px] bg-brand-500/20 text-brand-400 px-1.5 py-0.5 rounded">current</span>}
+                    </div>
+                  </div>
+                ) : (
+                  <div key={h.id} className="flex items-center gap-0">
+                    {i > 0 && <span className="text-gray-600 text-xs px-1.5">→</span>}
+                    <div className={`text-center rounded-lg px-2.5 py-1.5 ${isCurrent ? 'bg-brand-700/30 border border-brand-500/30' : 'bg-brand-900/40'}`}>
+                      <div className={`text-sm font-semibold ${isCurrent ? 'text-brand-300' : 'text-gray-400'}`}>AED {priceM}</div>
+                      <div className="text-[10px] text-gray-500">{dateStr}</div>
+                      {isCurrent && <div className="text-[9px] bg-brand-500/20 text-brand-400 px-1.5 py-0.5 rounded mt-0.5 inline-block">current</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Dip 1 — vs Prior Listing — PRD: previous_price != null && change_aed != null */}
       {prevPrice != null && dipAed != null && (
         <>

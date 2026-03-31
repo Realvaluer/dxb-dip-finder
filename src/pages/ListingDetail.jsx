@@ -134,6 +134,31 @@ export default function ListingDetail() {
 
         <div className="border-t border-border" />
 
+        {/* Price history chain */}
+        {l.price_history && l.price_history.length >= 2 && (
+          <>
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Price history</div>
+              <div className="flex items-center flex-wrap gap-y-2">
+                {l.price_history.map((h, i) => {
+                  const isCurrent = h.id === l.id;
+                  return (
+                    <div key={h.id} className="flex items-center">
+                      {i > 0 && <span className="text-muted text-xs px-2">→</span>}
+                      <div className={`text-center rounded-xl px-3 py-2 ${isCurrent ? 'bg-accent/10 border border-accent/30' : 'bg-card'}`}>
+                        <div className={`text-sm font-bold ${isCurrent ? 'text-accent' : ''}`}>{formatPrice(h.price)}</div>
+                        <div className="text-[10px] text-muted">{formatDate(h.date, true)}</div>
+                        {isCurrent && <div className="text-[9px] text-accent mt-0.5">current</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="border-t border-border" />
+          </>
+        )}
+
         {/* Same-listing price change */}
         {hasSameListingChange && (
           <>
@@ -195,41 +220,6 @@ export default function ListingDetail() {
               )}
             </div>
 
-            <div className="border-t border-border" />
-          </>
-        )}
-
-        {/* Price history */}
-        {l.price_history && l.price_history.length > 0 && (
-          <>
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Price history</div>
-              <div className="space-y-2">
-                {l.price_history.map((h, i) => {
-                  const oldVal = parseInt(h.old_value, 10);
-                  const newVal = parseInt(h.new_value, 10);
-                  const change = newVal - oldVal;
-                  const changePct = oldVal ? ((change / oldVal) * 100).toFixed(1) : 0;
-                  const isDown = change < 0;
-                  return (
-                    <div key={i} className="bg-card rounded-xl p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted">{formatDate(h.edited_at)}</span>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          isDown
-                            ? 'bg-[rgba(226,75,74,0.15)] border border-[rgba(226,75,74,0.4)] text-dip-red'
-                            : 'bg-[rgba(29,158,117,0.15)] border border-[rgba(29,158,117,0.4)] text-accent'
-                        }`}>
-                          {isDown ? '↓' : '↑'} {isDown ? '−' : '+'}{Math.abs(changePct)}%
-                        </span>
-                      </div>
-                      <div className="text-sm font-bold mt-1">AED {newVal?.toLocaleString()}</div>
-                      <div className="text-[11px] text-muted">from AED {oldVal?.toLocaleString()}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
             <div className="border-t border-border" />
           </>
         )}

@@ -601,13 +601,42 @@ app.get('/api/listings/:id', async (req, res) => {
 
     if (error || !row) return res.status(404).json({ error: 'Not found' });
 
-    // Get edits (price history) from ddf_edits
-    const { data: edits } = await supabase
-      .from('ddf_edits')
-      .select('old_value, new_value, edited_at')
-      .eq('listing_id', id)
-      .eq('field_name', 'price_aed')
-      .order('edited_at', { ascending: false });
+    // Build price chain: all listings for same property in last 180 days
+    let priceChain = [];
+    if (row.property_name && row.community && row.bedrooms != null) {
+      const cutoff = new Date(new Date(row.date_listed || row.scraped_at).getTime() - 180 * 86400000).toISOString().slice(0, 10);
+      let chainQuery = supabase
+        .from(TABLE)
+        .select('id, price_aed, date_listed, listing_change, source, reference_no, size_sqft')
+        .eq('property_name', row.property_name)
+        .eq('community', row.community)
+        .eq('bedrooms', row.bedrooms)
+        .eq('purpose', row.purpose)
+        .gte('date_listed', cutoff)
+        .order('date_listed', { ascending: true })
+        .order('price_aed', { ascending: true });
+
+      const { data: siblings } = await chainQuery;
+      if (siblings && siblings.length > 0) {
+        // No size filter — same property_name + community + bedrooms + purpose
+        // is already a strong match; reported sizes vary widely between agents
+        const filtered = siblings;
+        // Deduplicate by price+date (keep first)
+        const seen = new Set();
+        for (const s of filtered) {
+          const key = `${s.price_aed}|${s.date_listed}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          priceChain.push({
+            id: s.id,
+            price: s.price_aed,
+            date: s.date_listed,
+            change: s.listing_change,
+            source: s.source,
+          });
+        }
+      }
+    }
 
     // Get comparison — prefer dip_prev_* columns, fallback to dip_ref_id JOIN
     let comparison = null;
@@ -651,7 +680,7 @@ app.get('/api/listings/:id', async (req, res) => {
     }
     res.json({
       ...mapped,
-      price_history: edits || [],
+      price_history: priceChain.length >= 2 ? priceChain : [],
       comparison,
     });
   } catch (err) {
