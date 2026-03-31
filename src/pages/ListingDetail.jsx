@@ -47,7 +47,8 @@ export default function ListingDetail() {
   const l = listing;
   const isDecrease = l.change_pct != null && l.change_pct < 0;
   const isIncrease = l.change_pct != null && l.change_pct > 0;
-  const hasChange = (isDecrease || isIncrease) && l.previous_price != null && l.price_changed_at != null;
+  // PRD: previous_price != null && change_aed != null
+  const hasChange = l.previous_price != null && l.change_aed != null;
   const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
   const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
   const aedPerSqft = l.size_sqft ? Math.round(l.price_aed / l.size_sqft) : null;
@@ -56,8 +57,8 @@ export default function ListingDetail() {
   const hasSameListingChange = l.listing_change != null && l.listing_change !== 0;
   const sameDecrease = hasSameListingChange && l.listing_change < 0;
 
-  // Listing vs Last Sale
-  const hasLastSale = l.last_sale_price != null;
+  // Listing vs Last Sale — PRD: last_sale_price != null && last_sale_date != null
+  const hasLastSale = l.last_sale_price != null && l.last_sale_date != null;
   const saleChange = l.last_sale_change;
   const saleDecrease = hasLastSale && saleChange != null && saleChange < 0;
 
@@ -166,9 +167,9 @@ export default function ListingDetail() {
                   <div className="text-sm font-bold mt-0.5">{formatPrice(l.previous_price)}</div>
                 </div>
                 <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">{isDecrease ? 'Decreased by' : 'Increased by'}</div>
-                  <div className={`text-sm font-bold mt-0.5 ${isDecrease ? 'text-dip-red' : 'text-accent'}`}>
-                    {isDecrease ? '−' : '+'}{formatPrice(absChangeAed)}
+                  <div className="text-[10px] text-muted">{l.change_aed < 0 ? 'Decreased by' : 'Increased by'}</div>
+                  <div className={`text-sm font-bold mt-0.5 ${l.change_aed < 0 ? 'text-dip-red' : 'text-accent'}`}>
+                    {l.change_aed < 0 ? '−' : '+'}{formatPrice(absChangeAed)}
                   </div>
                 </div>
                 <div className="bg-card rounded-xl p-3">

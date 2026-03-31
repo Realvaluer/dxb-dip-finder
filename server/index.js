@@ -56,14 +56,14 @@ setInterval(() => {
 
 // FIX 2: Select only fields the frontend needs (was SELECT * → 113KB, now ~40KB)
 const LISTING_SELECT = 'id, reference_no, source, scraped_at, date_listed, purpose, title, distress, ready_off_plan, city, community, property_name, type, bedrooms, bathrooms, size_sqft, furnished, price_aed, price_sqft, listing_change, broker_agency, url, dip_pct, dip_price, dip_ref_id, dip_prev_price, dip_prev_url, dip_prev_source, dip_prev_date, dip_prev_size, dip_prev_furnished, last_txn_price, last_txn_date, last_txn_change, last_txn_change_pct, last_txn_size, last_txn_type';
+// TODO: Add listing_change_method to LISTING_SELECT once column is added via Supabase dashboard
 
 function mapRow(row, refData, saleData) {
   if (!row) return null;
   const ref = refData || null;
   const sale = saleData || null;
-  // listing_change is only valid if |change| < 50% of price (filters out reference collisions)
-  const validListingChange = row.listing_change != null && row.listing_change !== 0
-    && row.price_aed && Math.abs(row.listing_change) < (row.price_aed * 0.5);
+  // Pass listing_change through if non-null and non-zero
+  const validListingChange = row.listing_change != null && row.listing_change !== 0;
   // Listing vs Last Sale: difference between listing price and last DLD sale price
   const saleChange = sale ? row.price_aed - sale.sale_price : null;
   return {

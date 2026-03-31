@@ -12,13 +12,11 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const isIncrease = displayPct != null && displayPct > 0;
   const absChangePct = displayPct != null ? Math.abs(displayPct).toFixed(1) : null;
 
-  // Same Listing change (listing_change field — price changed on same listing)
-  const hasSameListing = l.listing_change != null && l.listing_change < 0;
+  // Same Listing change — PRD: listing_change != null && listing_change !== 0 (both directions)
+  const hasSameListing = l.listing_change != null && l.listing_change !== 0;
 
-  // Previous Listing (dip data — listing vs. different listing)
-  // Show if price diff exists and we have a previous price — size is optional
-  const hasPrevListing = l.change_aed != null && l.change_aed !== 0
-    && (l.previous_price != null || l.dip_prev_price != null);
+  // Previous Listing — PRD: previous_price != null && change_aed != null
+  const hasPrevListing = l.previous_price != null && l.change_aed != null;
   const prevIsNeg = hasPrevListing && l.change_aed < 0;
 
   // Last Sale/Rent (transaction data)

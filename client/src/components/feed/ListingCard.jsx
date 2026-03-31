@@ -22,10 +22,13 @@ export default function ListingCard({ listing }) {
   const prevPrice = previous_price;
   const prevDate = price_changed_at;
 
-  // Signal 2 guard
+  // Signal 1 guard — PRD: previous_price != null && change_aed != null
+  const hasPrevListing = prevPrice != null && dipAed != null;
+
+  // Signal 2 guard — PRD: listing_change != null && listing_change !== 0
   const hasListingChange = listing_change != null && listing_change !== 0;
 
-  // Signal 3 guard — use new names, fall back to legacy
+  // Signal 3 guard — PRD: last_sale_price != null && last_sale_date != null
   const txnPrice = last_sale_price ?? last_txn_price;
   const txnDate = last_sale_date ?? last_txn_date;
   const txnSize = last_sale_size;
@@ -93,7 +96,7 @@ export default function ListingCard({ listing }) {
       {/* Dip rows */}
       <div className="flex flex-col gap-1">
         {/* Signal 1 — vs Prior Listing */}
-        {dipAed != null && dipAed !== 0 && prevPrice != null && (
+        {hasPrevListing && (
           <div className="flex items-center gap-1.5 text-xs">
             <span className="text-gray-600 text-[10px] w-[70px] shrink-0">vs Prior</span>
             <span className={dipAed < 0 ? 'text-red-400' : 'text-green-400'}>

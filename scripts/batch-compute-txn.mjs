@@ -16,6 +16,8 @@ const salesDb = createClient(
 );
 
 const TABLE = 'ddf_listings';
+const RECENT_MODE = process.argv.includes('--recent');
+const RECENT_HOURS = 25;
 
 // ── Community aliases (DDF name → RV community names) ─────────────────────
 const COMMUNITY_ALIASES = {
@@ -400,18 +402,23 @@ async function findMatch(listing, rvData) {
 async function main() {
   let processed = 0, updated = 0, noMatch = 0;
   const startTime = Date.now();
+  const recentCutoff = RECENT_MODE
+    ? new Date(Date.now() - RECENT_HOURS * 60 * 60 * 1000).toISOString()
+    : null;
+
+  if (RECENT_MODE) console.log(`--recent mode: only listings scraped after ${recentCutoff}`);
 
   // Step 1: Get all unique communities from DDF
   console.log('Loading DDF communities...');
-  // Supabase default limit is 1000 rows — must paginate with explicit count
   const allComms = new Set();
   let commFrom = 0;
   while (true) {
-    const { data: commBatch, error: commErr } = await supabase.from(TABLE)
+    let query = supabase.from(TABLE)
       .select('community', { count: 'exact' })
       .eq('is_valid', true)
-      .is('last_txn_price', null)
-      .range(commFrom, commFrom + 999);
+      .is('last_txn_price', null);
+    if (recentCutoff) query = query.gte('scraped_at', recentCutoff);
+    const { data: commBatch, error: commErr } = await query.range(commFrom, commFrom + 999);
     if (commErr) { console.log('Community fetch error:', commErr.message); break; }
     if (!commBatch || commBatch.length === 0) break;
     commBatch.forEach(r => { if (r.community) allComms.add(r.community); });
@@ -440,12 +447,13 @@ async function main() {
     let commProcessed = 0, commUpdated = 0;
 
     while (true) {
-      const { data: rows, error: rowErr } = await supabase.from(TABLE)
+      let rowQuery = supabase.from(TABLE)
         .select('id, property_name, community, bedrooms, size_sqft, type, purpose, price_aed')
         .eq('is_valid', true)
         .eq('community', community)
-        .is('last_txn_price', null)
-        .range(offset, offset + 499);
+        .is('last_txn_price', null);
+      if (recentCutoff) rowQuery = rowQuery.gte('scraped_at', recentCutoff);
+      const { data: rows, error: rowErr } = await rowQuery.range(offset, offset + 499);
 
       if (rowErr) { console.log(`  ERROR fetching ${community}: ${rowErr.message}`); break; }
       if (!rows || rows.length === 0) break;

@@ -122,8 +122,8 @@ export default function DetailPage() {
         ))}
       </div>
 
-      {/* Dip 1 — vs Prior Listing (only show with full context) */}
-      {dipPct != null && prevPrice != null && prevDate != null && (
+      {/* Dip 1 — vs Prior Listing — PRD: previous_price != null && change_aed != null */}
+      {prevPrice != null && dipAed != null && (
         <>
           <div className="mx-4 border-t border-brand-800 my-2" />
           <div className="px-4 my-4">
@@ -201,8 +201,8 @@ export default function DetailPage() {
         </>
       )}
 
-      {/* Transaction history — only when txn data exists */}
-      {(txn_history.length > 0 || last_txn_price) && (
+      {/* Transaction history — PRD: last_sale_price != null && last_sale_date != null, or txn_history */}
+      {(txn_history.length > 0 || (listing.last_sale_price != null && listing.last_sale_date != null)) && (
         <>
           <div className="mx-4 border-t border-brand-800 my-2" />
           <div className="px-4 my-4">
