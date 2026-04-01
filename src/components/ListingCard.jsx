@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatPrice, sourceTag } from '../utils';
 import { trackClick } from '../lib/analytics';
+import SharePopover from './SharePopover';
 
 export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const navigate = useNavigate();
@@ -24,10 +26,18 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
   const saleIsNeg = hasLastSale && l.last_sale_change != null && l.last_sale_change < 0;
   const hasAnyComparison = hasSameListing || hasPrevListing || hasLastSale;
 
+  const [shareOpen, setShareOpen] = useState(false);
+
   function handleBookmark(e) {
     e.stopPropagation();
     trackClick('bookmark', { property_id: l.id });
     onToggleBookmark?.(l.id);
+  }
+
+  function handleShare(e) {
+    e.stopPropagation();
+    trackClick('share', { property_id: l.id });
+    setShareOpen(!shareOpen);
   }
 
   function handleViewLink(e) {
@@ -54,6 +64,14 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
               +{absChangePct}%
             </span>
           )}
+          <span className="relative" onClick={handleShare}>
+            <span className="min-w-[28px] min-h-[28px] flex items-center justify-center">
+              <svg className="w-4 h-4 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" />
+              </svg>
+            </span>
+            {shareOpen && <SharePopover listing={l} onClose={() => setShareOpen(false)} />}
+          </span>
           <span onClick={handleBookmark} className="min-w-[28px] min-h-[28px] flex items-center justify-center">
             <svg className={`w-4 h-4 ${bookmarked ? 'text-accent fill-accent' : 'text-muted'}`} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} fill={bookmarked ? 'currentColor' : 'none'}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />

@@ -1,10 +1,31 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import SEO from '../components/SEO';
 import BottomNav from '../components/BottomNav';
-import { formatDate } from '../utils';
 
 export default function Profile() {
   const { user, isAuthenticated, logout, openAuth } = useAuth();
+  const [dipReportSubscribed, setDipReportSubscribed] = useState(false);
+  const [dipReportLoading, setDipReportLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.token) return;
+    fetch('/api/dip-report/status', { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => r.ok ? r.json() : { subscribed: false })
+      .then(d => setDipReportSubscribed(d.subscribed))
+      .catch(() => {});
+  }, [isAuthenticated, user?.token]);
+
+  function toggleDipReport() {
+    if (!user?.token) return;
+    setDipReportLoading(true);
+    const endpoint = dipReportSubscribed ? '/api/dip-report/unsubscribe' : '/api/dip-report/subscribe';
+    fetch(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setDipReportSubscribed(d.subscribed); })
+      .catch(() => {})
+      .finally(() => setDipReportLoading(false));
+  }
 
   return (
     <div className="min-h-screen bg-bg pb-20">
@@ -23,6 +44,24 @@ export default function Profile() {
             </div>
             <div className="text-white font-medium">{user.email}</div>
             <div className="text-muted text-sm mt-1">Member</div>
+
+            {/* Dip Report toggle */}
+            <div className="mt-8 bg-card border border-border rounded-xl p-4 text-left">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-white">Daily Dip Report</div>
+                  <div className="text-xs text-muted mt-0.5">Top 10 biggest price drops in Dubai, every morning</div>
+                </div>
+                <button
+                  onClick={toggleDipReport}
+                  disabled={dipReportLoading}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${dipReportSubscribed ? 'bg-accent' : 'bg-border'}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${dipReportSubscribed ? 'left-[22px]' : 'left-0.5'}`} />
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={logout}
               className="mt-8 bg-card border border-border text-muted px-6 py-2.5 rounded-xl text-sm min-h-[44px]"

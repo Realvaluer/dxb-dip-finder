@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useFetch } from '../hooks/useApi';
 import SEO from '../components/SEO';
+import SharePopover from '../components/SharePopover';
 import { formatPrice, formatDate, sourceTag } from '../utils';
 import { trackPropertyView, trackClick } from '../lib/analytics';
 
@@ -62,6 +63,7 @@ export default function ListingDetail() {
   const saleChange = l.last_sale_change;
   const saleDecrease = hasLastSale && saleChange != null && saleChange < 0;
 
+  const [shareOpen, setShareOpen] = useState(false);
   const linkStyle = "flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-3 text-accent text-sm font-medium min-h-[44px]";
 
   return (
@@ -75,7 +77,15 @@ export default function ListingDetail() {
           </svg>
           Feed
         </button>
-        <span className="text-[11px] font-mono text-muted">{sourceTag(l.source)}</span>
+        <div className="flex items-center gap-3">
+          <button onClick={() => { trackClick('share', { property_id: l.id }); setShareOpen(!shareOpen); }} className="relative p-2 -m-2 min-h-[44px] min-w-[44px] flex items-center justify-center">
+            <svg className="w-5 h-5 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" />
+            </svg>
+            {shareOpen && <SharePopover listing={l} onClose={() => setShareOpen(false)} />}
+          </button>
+          <span className="text-[11px] font-mono text-muted">{sourceTag(l.source)}</span>
+        </div>
       </div>
 
       <div className="px-4 pt-4 space-y-4">

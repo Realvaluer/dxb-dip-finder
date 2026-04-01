@@ -6,6 +6,7 @@ import Feed from './pages/Feed';
 import ListingDetail from './pages/ListingDetail';
 import Saved from './pages/Saved';
 import Profile from './pages/Profile';
+import Matches from './pages/Matches';
 import { initAnalytics, trackPageView } from './lib/analytics';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/" element={<Feed />} />
         <Route path="/listing/:id" element={<ListingDetail />} />
         <Route path="/saved" element={<Saved />} />
+        <Route path="/matches/:savedListingId" element={<Matches />} />
         <Route path="/profile" element={<Profile />} />
       </Routes>
       <AuthSheet />

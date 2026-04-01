@@ -128,6 +128,10 @@ function nameTokens(name) {
 
 // Explicit name overrides: DDF name → RV search tokens
 const NAME_OVERRIDES = {
+  'dt1': 'dt 1 downtown',
+  'elitz 1 by danube': 'elitz by danube - 1',
+  'elitz 2 by danube': 'elitz 2 by danube',
+  'elitz 3 by danube': 'elitz 3 by danube',
   'the torch': 'torch tower',
   'the address sky view tower 1': 'address residence sky',
   'the address sky view tower 2': 'address residence sky',
@@ -232,33 +236,50 @@ const NAME_OVERRIDES = {
 
 // Check if DDF name matches RV name using fuzzy token matching
 function namesMatch(ddfName, rvName) {
-  // Check explicit overrides first
-  const override = NAME_OVERRIDES[normalizeName(ddfName)];
-  if (override) {
-    const rvNorm = normalizeName(rvName);
-    if (rvNorm.includes(override) || override.includes(rvNorm)) return true;
-  }
   const ddfNorm = normalizeName(ddfName);
   const rvNorm = normalizeName(rvName);
 
-  // Exact match
-  if (ddfNorm === rvNorm) return true;
+  // --- Base name match ---
+  let baseMatch = false;
 
-  // Contains match (either direction)
-  if (rvNorm.includes(ddfNorm) || ddfNorm.includes(rvNorm)) return true;
-
-  // Token overlap: all DDF tokens appear in RV name
-  const ddfTokens = nameTokens(ddfName);
-  const rvTokens = nameTokens(rvName);
-  if (ddfTokens.length >= 2 && ddfTokens.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) return true;
-
-  // Reversed word order: "binghatti ghost" ↔ "ghost by binghatti"
-  if (ddfTokens.length >= 2) {
-    const ddfReversed = [...ddfTokens].reverse();
-    if (ddfReversed.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) return true;
+  // Check explicit overrides first
+  const override = NAME_OVERRIDES[ddfNorm];
+  if (override) {
+    if (rvNorm.includes(override) || override.includes(rvNorm)) baseMatch = true;
   }
 
-  return false;
+  if (!baseMatch) {
+    // Exact match
+    if (ddfNorm === rvNorm) baseMatch = true;
+    // Contains match (either direction)
+    else if (rvNorm.includes(ddfNorm) || ddfNorm.includes(rvNorm)) baseMatch = true;
+    else {
+      // Token overlap: all DDF tokens appear in RV name
+      const ddfTokens = nameTokens(ddfName);
+      const rvTokens = nameTokens(rvName);
+      if (ddfTokens.length >= 2 && ddfTokens.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) baseMatch = true;
+      // Reversed word order: "binghatti ghost" ↔ "ghost by binghatti"
+      if (!baseMatch && ddfTokens.length >= 2) {
+        const ddfReversed = [...ddfTokens].reverse();
+        if (ddfReversed.every(t => rvTokens.some(rt => rt.includes(t) || t.includes(rt)))) baseMatch = true;
+      }
+    }
+  }
+
+  if (!baseMatch) return false;
+
+  // --- Tower-level precision ---
+  // If DDF name has "tower/building/block/phase N", RV must have the same suffix.
+  // Prevents cross-tower matches (Tower 1 listing ↔ Tower 2 transaction).
+  const towerRe = /\b(tower|building|block|phase)\s+(\d+)/;
+  const ddfTower = ddfNorm.match(towerRe);
+  if (ddfTower) {
+    const rvTower = rvNorm.match(towerRe);
+    if (!rvTower) return false; // RV has no tower info — reject
+    if (ddfTower[1] !== rvTower[1] || ddfTower[2] !== rvTower[2]) return false;
+  }
+
+  return true;
 }
 
 // ── Transaction quality filters ───────────────────────────────────────────

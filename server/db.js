@@ -89,7 +89,30 @@ if (!Database) {
       sent_at DATETIME DEFAULT (datetime('now')),
       UNIQUE(user_id, listing_id)
     );
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      type TEXT NOT NULL,
+      listing_id INTEGER NOT NULL,
+      saved_listing_id INTEGER,
+      message TEXT NOT NULL,
+      created_at DATETIME DEFAULT (datetime('now')),
+      dismissed_at DATETIME
+    );
+    CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, dismissed_at);
+    CREATE TABLE IF NOT EXISTS dip_report_subscribers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      user_id INTEGER REFERENCES users(id),
+      subscribed_at DATETIME DEFAULT (datetime('now')),
+      active INTEGER DEFAULT 1
+    );
   `);
+
+  // Add columns to saved_listings for alert tracking (safe if already exist)
+  try { usersDb.exec('ALTER TABLE saved_listings ADD COLUMN last_price_alerted REAL'); } catch {}
+  try { usersDb.exec('ALTER TABLE saved_listings ADD COLUMN last_match_alerted_at DATETIME'); } catch {}
+
   console.log('Users DB initialized at:', usersDbPath);
 } catch (err) {
   console.error('Failed to initialize users DB (auth features disabled):', err.message);

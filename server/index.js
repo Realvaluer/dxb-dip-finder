@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { supabase, salesDb, usersDb } from './db.js';
 import { registerAuthRoutes, requireAuth } from './auth.js';
 import analyticsRouter from './routes/analytics.js';
+import { startCronJobs } from './notifications.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1057,6 +1058,97 @@ app.delete('/api/saved/:listing_id', requireAuth, (req, res) => {
   res.json({ saved: false });
 });
 
+// ── Notification endpoints ──────────────────────────────────────────────────
+
+app.get('/api/notifications', requireAuth, (req, res) => {
+  if (!usersDb) return res.json({ notifications: [] });
+  const rows = usersDb.prepare(
+    'SELECT id, type, listing_id, saved_listing_id, message, created_at FROM notifications WHERE user_id = ? AND dismissed_at IS NULL ORDER BY created_at DESC LIMIT 50'
+  ).all(req.user.user_id);
+  res.json({ notifications: rows });
+});
+
+app.get('/api/notifications/count', requireAuth, (req, res) => {
+  if (!usersDb) return res.json({ count: 0 });
+  const row = usersDb.prepare(
+    'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND dismissed_at IS NULL'
+  ).get(req.user.user_id);
+  res.json({ count: row.count });
+});
+
+app.post('/api/notifications/:id/dismiss', requireAuth, (req, res) => {
+  if (!usersDb) return res.status(503).json({ error: 'Not available' });
+  usersDb.prepare(
+    "UPDATE notifications SET dismissed_at = datetime('now') WHERE id = ? AND user_id = ?"
+  ).run(parseInt(req.params.id), req.user.user_id);
+  res.json({ success: true });
+});
+
+app.post('/api/notifications/dismiss-all', requireAuth, (req, res) => {
+  if (!usersDb) return res.status(503).json({ error: 'Not available' });
+  usersDb.prepare(
+    "UPDATE notifications SET dismissed_at = datetime('now') WHERE user_id = ? AND dismissed_at IS NULL"
+  ).run(req.user.user_id);
+  res.json({ success: true });
+});
+
+app.get('/api/matches/:savedListingId', requireAuth, async (req, res) => {
+  if (!usersDb) return res.status(503).json({ error: 'Not available' });
+  try {
+    const savedRow = usersDb.prepare(
+      'SELECT listing_id FROM saved_listings WHERE id = ? AND user_id = ?'
+    ).get(parseInt(req.params.savedListingId), req.user.user_id);
+    if (!savedRow) return res.status(404).json({ error: 'Saved listing not found' });
+
+    // Get the saved listing's criteria from Supabase
+    const { data: ref } = await supabase.from(TABLE).select('property_name, community, bedrooms').eq('id', savedRow.listing_id).single();
+    if (!ref) return res.status(404).json({ error: 'Listing not found' });
+
+    // Find matching listings
+    let query = supabase.from(TABLE).select(LISTING_SELECT, { count: 'exact' })
+      .eq('is_valid', true)
+      .eq('property_name', ref.property_name)
+      .eq('community', ref.community)
+      .eq('bedrooms', ref.bedrooms)
+      .neq('id', savedRow.listing_id)
+      .order('date_listed', { ascending: false })
+      .limit(50);
+
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    const listings = (data || []).map(r => mapRow(r, null, null));
+    res.json({ listings, total: count || 0, criteria: ref });
+  } catch (err) {
+    console.error('Matches error:', err);
+    res.status(500).json({ error: 'Failed to fetch matches' });
+  }
+});
+
+// ── Dip Report subscription endpoints ──────────────────────────────────────
+
+app.get('/api/dip-report/status', requireAuth, (req, res) => {
+  if (!usersDb) return res.json({ subscribed: false });
+  const row = usersDb.prepare(
+    'SELECT active FROM dip_report_subscribers WHERE email = ?'
+  ).get(req.user.email);
+  res.json({ subscribed: row?.active === 1 });
+});
+
+app.post('/api/dip-report/subscribe', requireAuth, (req, res) => {
+  if (!usersDb) return res.status(503).json({ error: 'Not available' });
+  usersDb.prepare(
+    'INSERT INTO dip_report_subscribers (email, user_id, active) VALUES (?, ?, 1) ON CONFLICT(email) DO UPDATE SET active = 1, user_id = ?'
+  ).run(req.user.email, req.user.user_id, req.user.user_id);
+  res.json({ subscribed: true });
+});
+
+app.post('/api/dip-report/unsubscribe', requireAuth, (req, res) => {
+  if (!usersDb) return res.status(503).json({ error: 'Not available' });
+  usersDb.prepare('UPDATE dip_report_subscribers SET active = 0 WHERE email = ?').run(req.user.email);
+  res.json({ subscribed: false });
+});
+
 // ── static files (production) ────────────────────────────────────────────────
 
 const distPath = path.join(__dirname, '..', 'dist');
@@ -1075,6 +1167,9 @@ app.listen(PORT, '0.0.0.0', async () => {
   } catch (e) {
     console.error('Supabase connection check failed:', e.message);
   }
+
+  // Start cron jobs (daily alerts + dip report)
+  startCronJobs();
 
   // FIX 5: Self-ping every 4 min to prevent Railway cold starts
   setInterval(() => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import useFilters from '../hooks/useFilters';
 import useMediaQuery from '../hooks/useMediaQuery';
 import useBookmarks from '../hooks/useBookmarks';
+import { useAuth } from '../hooks/useAuth';
 import { useFetch, useDebouncedFetch } from '../hooks/useApi';
 import SEO from '../components/SEO';
 import TopBar from '../components/TopBar';
@@ -64,8 +65,35 @@ const orgSchema = {
 export default function Feed() {
   const { filters, setFilter, setFilters, resetFilters, activeFilterCount, queryString } = useFilters();
   const { toggle, isBookmarked } = useBookmarks();
+  const { user, isAuthenticated } = useAuth();
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Dip report banner state
+  const [dipBannerDismissed, setDipBannerDismissed] = useState(() => localStorage.getItem('dip_report_banner_dismissed') === '1');
+  const [dipSubscribed, setDipSubscribed] = useState(true); // default true to hide banner until checked
+  useEffect(() => {
+    if (!isAuthenticated || !user?.token) { setDipSubscribed(false); return; }
+    fetch('/api/dip-report/status', { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => r.ok ? r.json() : { subscribed: false })
+      .then(d => setDipSubscribed(d.subscribed))
+      .catch(() => setDipSubscribed(false));
+  }, [isAuthenticated, user?.token]);
+
+  function handleDipSubscribe() {
+    if (!user?.token) return;
+    fetch('/api/dip-report/subscribe', { method: 'POST', headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setDipSubscribed(true); })
+      .catch(() => {});
+  }
+
+  function dismissDipBanner() {
+    setDipBannerDismissed(true);
+    localStorage.setItem('dip_report_banner_dismissed', '1');
+  }
+
+  const showDipBanner = isAuthenticated && !dipSubscribed && !dipBannerDismissed;
 
   // Desktop pagination state
   const [page, setPage] = useState(1);
@@ -332,6 +360,20 @@ export default function Feed() {
             loading={kpiLoading}
             onCommunityClick={c => setFilter('communities', [c])}
           />
+
+          {/* Dip Report banner */}
+          {showDipBanner && (
+            <div className="mx-4 mb-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-3 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium text-white">Get Dubai's biggest dips in your inbox</div>
+                <div className="text-[11px] text-muted mt-0.5">Free daily report — top 10 price drops</div>
+              </div>
+              <button onClick={handleDipSubscribe} className="shrink-0 bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-lg">
+                Subscribe
+              </button>
+              <button onClick={dismissDipBanner} className="shrink-0 text-muted text-sm p-1">&times;</button>
+            </div>
+          )}
 
           {/* Header controls: sort + purpose */}
           <div className="px-4 py-2 flex gap-2">
