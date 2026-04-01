@@ -10,6 +10,7 @@ export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: listing, loading, error } = useFetch(`/api/listings/${id}`, [id]);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     if (listing) trackPropertyView(listing.id, listing.property_name || listing.community, {
@@ -63,7 +64,6 @@ export default function ListingDetail() {
   const saleChange = l.last_sale_change;
   const saleDecrease = hasLastSale && saleChange != null && saleChange < 0;
 
-  const [shareOpen, setShareOpen] = useState(false);
   const linkStyle = "flex items-center gap-2 bg-accent/10 border border-accent/20 rounded-xl px-4 py-3 text-accent text-sm font-medium min-h-[44px]";
 
   return (
