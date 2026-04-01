@@ -9,7 +9,7 @@ export default function SharePopover({ listing, onClose }) {
   const beds = l.bedrooms === 0 || l.bedrooms == null ? 'Studio' : `${l.bedrooms}BR`;
   const community = l.community || '';
   const price = formatPrice(l.price_aed);
-  const url = `https://dxbdipfinder.com/listing/${l.id}`;
+  const url = `https://www.dxbdipfinder.com/listing/${l.id}`;
 
   // Build dip text if available
   let dipText = '';

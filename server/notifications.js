@@ -187,12 +187,12 @@ function buildAlertEmailHtml(priceDrops, newMatches) {
         <div style="background:#252540;border-radius:8px;padding:12px 16px;margin-bottom:8px;">
           <div style="font-weight:600;font-size:14px;">${l.property_name || l.community} | ${beds} | ${l.community}</div>
           <div style="margin-top:4px;font-size:13px;">Listed at AED ${fmtPrice(l.price_aed)}${l.dip_pct ? ` | Dip: ${Math.abs(l.dip_pct).toFixed(1)}%` : ''}</div>
-          <a href="https://dxbdipfinder.com/listing/${l.id}" style="color:#1D9E75;font-size:12px;text-decoration:none;margin-top:6px;display:inline-block;">View Listing →</a>
+          <a href="https://www.dxbdipfinder.com/listing/${l.id}" style="color:#1D9E75;font-size:12px;text-decoration:none;margin-top:6px;display:inline-block;">View Listing →</a>
         </div>`;
     }
   }
 
-  html += '<p style="color:#888;font-size:11px;margin-top:24px;text-align:center;">You\'re receiving this because you saved listings on <a href="https://dxbdipfinder.com" style="color:#1D9E75;">dxbdipfinder.com</a></p>';
+  html += '<p style="color:#888;font-size:11px;margin-top:24px;text-align:center;">You\'re receiving this because you saved listings on <a href="https://www.dxbdipfinder.com" style="color:#1D9E75;">dxbdipfinder.com</a></p>';
   html += '</div>';
   return html;
 }
@@ -280,12 +280,12 @@ function buildDipReportHtml(topDips, savedCommunities, today) {
         <div style="font-size:12px;color:#888;">#${i + 1}${isSaved ? ' <span style="color:#1D9E75;">&#9733; Your community</span>' : ''}</div>
         <div style="font-weight:600;font-size:14px;margin-top:2px;">${d.property_name || d.community} | ${beds} | ${d.community}</div>
         <div style="margin-top:4px;font-size:13px;">AED ${fmtPrice(d.price_aed)} | <span style="color:#E24B4A;font-weight:600;">${Math.abs(d.dip_pct).toFixed(1)}% below transaction</span></div>
-        <a href="https://dxbdipfinder.com/listing/${d.id}" style="color:#1D9E75;font-size:12px;text-decoration:none;margin-top:6px;display:inline-block;">View →</a>
+        <a href="https://www.dxbdipfinder.com/listing/${d.id}" style="color:#1D9E75;font-size:12px;text-decoration:none;margin-top:6px;display:inline-block;">View →</a>
       </div>`;
   });
 
-  html += '<div style="text-align:center;margin-top:20px;"><a href="https://dxbdipfinder.com" style="color:#1D9E75;font-size:13px;text-decoration:none;">View All Dips on DxbDipFinder →</a></div>';
-  html += '<p style="color:#888;font-size:11px;margin-top:24px;text-align:center;">You subscribed to the daily dip report on <a href="https://dxbdipfinder.com" style="color:#1D9E75;">dxbdipfinder.com</a>. Visit your profile to unsubscribe.</p>';
+  html += '<div style="text-align:center;margin-top:20px;"><a href="https://www.dxbdipfinder.com" style="color:#1D9E75;font-size:13px;text-decoration:none;">View All Dips on DxbDipFinder →</a></div>';
+  html += '<p style="color:#888;font-size:11px;margin-top:24px;text-align:center;">You subscribed to the daily dip report on <a href="https://www.dxbdipfinder.com" style="color:#1D9E75;">dxbdipfinder.com</a>. Visit your profile to unsubscribe.</p>';
   html += '</div>';
   return html;
 }

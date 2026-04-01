@@ -1,7 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 
 const SITE_NAME = 'DXB Dip Finder';
-const SITE_URL = 'https://dxbdipfinder.com';
+const SITE_URL = 'https://www.dxbdipfinder.com';
 const DEFAULT_OG = `${SITE_URL}/og-default.jpg`;
 
 export default function SEO({

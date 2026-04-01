@@ -2,7 +2,7 @@ import { SitemapStream, streamToPromise } from 'sitemap';
 import { createWriteStream } from 'fs';
 import { Readable } from 'stream';
 
-const SITE_URL = 'https://dxbdipfinder.com';
+const SITE_URL = 'https://www.dxbdipfinder.com';
 
 // Phase 1: only the pages that exist right now
 // Phase 2 will add /area/:slug/ community pages

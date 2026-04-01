@@ -38,13 +38,13 @@ const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: 'DXB Dip Finder',
-  url: 'https://dxbdipfinder.com',
+  url: 'https://www.dxbdipfinder.com',
   description: 'Track property price drops across 20 Dubai communities daily. Find below-market-value deals updated from PropertyFinder and Bayut.',
   potentialAction: {
     '@type': 'SearchAction',
     target: {
       '@type': 'EntryPoint',
-      urlTemplate: 'https://dxbdipfinder.com/?q={search_term_string}'
+      urlTemplate: 'https://www.dxbdipfinder.com/?q={search_term_string}'
     },
     'query-input': 'required name=search_term_string'
   }
@@ -54,8 +54,8 @@ const orgSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'DXB Dip Finder',
-  url: 'https://dxbdipfinder.com',
-  logo: 'https://dxbdipfinder.com/logo.png',
+  url: 'https://www.dxbdipfinder.com',
+  logo: 'https://www.dxbdipfinder.com/logo.png',
   sameAs: [
     'https://twitter.com/dxbdipfinder',
     'https://www.instagram.com/dxbdipfinder'

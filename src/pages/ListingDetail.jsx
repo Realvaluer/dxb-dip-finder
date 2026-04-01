@@ -71,7 +71,7 @@ export default function ListingDetail() {
       <SEO title={l.property_name || l.community} description={`${l.property_name || l.community} — view price history and comparable transactions.`} noindex={true} />
       {/* Back row */}
       <div className="sticky top-0 z-30 bg-bg/95 backdrop-blur-sm px-4 py-3 flex items-center justify-between border-b border-border">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-accent text-sm min-h-[44px]">
+        <button onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')} className="flex items-center gap-1 text-accent text-sm min-h-[44px]">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
