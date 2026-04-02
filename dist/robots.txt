@@ -6,4 +6,4 @@ Disallow: /auth/
 Disallow: /saved
 Disallow: /profile
 
-Sitemap: https://dxbdipfinder.com/sitemap.xml
+Sitemap: https://www.dxbdipfinder.com/sitemap.xml
