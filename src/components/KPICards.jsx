@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 
 const CARDS = [
-  { key: 'total_listings', accent: 'bg-blue-500', label: 'Total Listings' },
+  { key: 'total_listings', accent: 'bg-blue-500', label: 'Total Listings Analyzed' },
   { key: 'highest_dip_pct', accent: 'bg-dip-red', label: 'Highest % drop in 24h' },
   { key: 'sales_drops', accent: 'bg-teal-500', label: 'Sales Drops' },
   { key: 'rental_drops', accent: 'bg-amber-500', label: 'Rental Drops' },

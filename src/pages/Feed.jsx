@@ -263,11 +263,8 @@ export default function Feed() {
             activeFilterCount={activeFilterCount}
           />
 
-          {/* Results count + sort */}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-muted">
-              {total.toLocaleString()} results
-            </span>
+          {/* Sort */}
+          <div className="flex items-center justify-end mb-3">
             <select
               value={filters.sort}
               onChange={e => setFilter('sort', e.target.value)}
@@ -420,12 +417,6 @@ export default function Feed() {
             </select>
           </div>
 
-          {/* Results count */}
-          <div className="px-4 pb-2">
-            <span className="text-xs text-muted">
-              {listingsData ? `${listingsData.total?.toLocaleString()} results` : ''}
-            </span>
-          </div>
 
           {/* Listings */}
           {listingsError ? (
