@@ -700,10 +700,10 @@ app.get('/api/kpis', async (req, res) => {
 
     // Run all 4 KPI queries in parallel — use pre-computed last_txn_* columns
     const [pctResult, totalResult, salesDropsResult, rentalDropsResult] = await Promise.all([
-      // Highest % drop (by transaction %) — respects filters
+      // Highest % drop TODAY (by transaction %) — respects filters
       (() => {
         let q = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
-          .eq('is_valid', true)
+          .eq('is_valid', true).eq('date_listed', latestDate || '')
           .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
           .order('last_txn_change_pct', { ascending: true }).limit(1);
         q = applyFilters(q, req.query);
