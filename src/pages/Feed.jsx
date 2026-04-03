@@ -252,7 +252,6 @@ export default function Feed() {
           <KPICards
             data={kpiData}
             loading={kpiLoading}
-            onCommunityClick={c => setFilter('communities', [c])}
           />
 
           <DesktopFilterBar
@@ -387,7 +386,6 @@ export default function Feed() {
           <KPICards
             data={kpiData}
             loading={kpiLoading}
-            onCommunityClick={c => setFilter('communities', [c])}
           />
 
           {/* Dip Report banner */}

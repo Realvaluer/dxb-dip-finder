@@ -1,42 +1,44 @@
 import { useNavigate } from 'react-router-dom';
-import { formatPriceShort } from '../utils';
 
 const CARDS = [
-  { key: 'highest_dip_pct', accent: 'bg-dip-red', label: 'Highest % drop today' },
-  { key: 'highest_dip_aed', accent: 'bg-dip-orange', label: 'Highest AED drop today' },
-  { key: 'most_drops_community', accent: 'bg-blue-500', label: 'Community with most drops' },
-  { key: 'dips_today', accent: 'bg-teal-500', label: 'Dips in last 24h' },
+  { key: 'total_listings', accent: 'bg-blue-500', label: 'Total Listings' },
+  { key: 'highest_dip_pct', accent: 'bg-dip-red', label: 'Highest % drop' },
+  { key: 'sales_drops', accent: 'bg-teal-500', label: 'Sales Drops' },
+  { key: 'rental_drops', accent: 'bg-amber-500', label: 'Rental Drops' },
 ];
 
-export default function KPICards({ data, loading, onCommunityClick }) {
+export default function KPICards({ data, loading }) {
   const navigate = useNavigate();
 
   function cardValue(card) {
     if (loading || !data) return null;
-    const d = data[card.key];
-    if (card.key === 'highest_dip_pct') return d ? `${d.change_pct}%` : '—';
-    if (card.key === 'highest_dip_aed') return d ? `−AED ${formatPriceShort(Math.abs(d.change_aed))}` : '—';
-    if (card.key === 'most_drops_community') return d?.community || '—';
-    if (card.key === 'dips_today') return data.dips_today ?? 0;
+    if (card.key === 'total_listings') return (data.total_listings ?? 0).toLocaleString();
+    if (card.key === 'highest_dip_pct') {
+      const d = data.highest_dip_pct;
+      return d ? `${d.change_pct}%` : '—';
+    }
+    if (card.key === 'sales_drops') return (data.sales_drops ?? 0).toLocaleString();
+    if (card.key === 'rental_drops') return (data.rental_drops ?? 0).toLocaleString();
     return '—';
   }
 
   function cardSubtitle(card) {
     if (!data) return '';
-    const d = data[card.key];
-    if (card.key === 'highest_dip_pct' && d) return `${d.property_name || ''} · ${d.community || ''}`;
-    if (card.key === 'highest_dip_aed' && d) return `${d.property_name || ''} · ${d.community || ''}`;
-    if (card.key === 'most_drops_community' && d) return `${d.count} listings with drops`;
-    if (card.key === 'dips_today') return 'Price drops today';
+    if (card.key === 'total_listings') return 'Active listings';
+    if (card.key === 'highest_dip_pct') {
+      const d = data.highest_dip_pct;
+      return d ? `${d.property_name || ''} · ${d.community || ''}` : 'No drops found';
+    }
+    if (card.key === 'sales_drops') return 'Below last transaction';
+    if (card.key === 'rental_drops') return 'Below last transaction';
     return '';
   }
 
   function handleClick(card) {
     if (!data) return;
-    const d = data[card.key];
-    if (card.key === 'highest_dip_pct' && d?.listing_id) navigate(`/listing/${d.listing_id}`);
-    if (card.key === 'highest_dip_aed' && d?.listing_id) navigate(`/listing/${d.listing_id}`);
-    if (card.key === 'most_drops_community' && d?.community) onCommunityClick(d.community);
+    if (card.key === 'highest_dip_pct' && data.highest_dip_pct?.listing_id) {
+      navigate(`/listing/${data.highest_dip_pct.listing_id}`);
+    }
   }
 
   return (

@@ -699,33 +699,35 @@ app.get('/api/kpis', async (req, res) => {
     const latestDate = latestRow?.date_listed;
 
     // Run all 4 KPI queries in parallel — use pre-computed last_txn_* columns
-    const [pctResult, aedResult, commResult, dipsResult] = await Promise.all([
-      // Highest % drop TODAY (by transaction %)
+    const [pctResult, totalResult, salesDropsResult, rentalDropsResult] = await Promise.all([
+      // Highest % drop (by transaction %) — respects filters
       (() => {
         let q = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
-          .eq('is_valid', true).eq('date_listed', latestDate || '')
+          .eq('is_valid', true)
           .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
           .order('last_txn_change_pct', { ascending: true }).limit(1);
         q = applyFilters(q, req.query);
         return q;
       })(),
-      // Highest AED drop TODAY (by transaction AED)
+      // Total listings — respects filters
       (() => {
-        let q = supabase.from(TABLE).select('id, last_txn_change, property_name, community')
-          .eq('is_valid', true).eq('date_listed', latestDate || '')
-          .not('last_txn_change', 'is', null).lt('last_txn_change', 0)
-          .order('last_txn_change', { ascending: true }).limit(1);
+        let q = supabase.from(TABLE).select('id', { count: 'exact', head: true })
+          .eq('is_valid', true);
         q = applyFilters(q, req.query);
         return q;
       })(),
-      // Community with most drops
-      supabase.from(TABLE).select('community')
-        .eq('is_valid', true).not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
-        .limit(10000),
-      // Dips in last 24h
+      // Sales drops count — respects filters
       (() => {
         let q = supabase.from(TABLE).select('id', { count: 'exact', head: true })
-          .eq('is_valid', true).eq('date_listed', latestDate || '')
+          .eq('is_valid', true).eq('purpose', 'Sale')
+          .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0);
+        q = applyFilters(q, req.query);
+        return q;
+      })(),
+      // Rental drops count — respects filters
+      (() => {
+        let q = supabase.from(TABLE).select('id', { count: 'exact', head: true })
+          .eq('is_valid', true).eq('purpose', 'Rent')
           .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0);
         q = applyFilters(q, req.query);
         return q;
@@ -739,27 +741,11 @@ app.get('/api/kpis', async (req, res) => {
       community: pctResult.data[0].community,
     } : null;
 
-    const highestAed = aedResult.data?.[0] ? {
-      listing_id: aedResult.data[0].id,
-      change_aed: aedResult.data[0].last_txn_change,
-      property_name: aedResult.data[0].property_name,
-      community: aedResult.data[0].community,
-    } : null;
-
-    // Process community counts
-    let mostDrops = null;
-    if (commResult.data?.length) {
-      const counts = {};
-      commResult.data.forEach(r => { if (r.community) counts[r.community] = (counts[r.community] || 0) + 1; });
-      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-      if (top) mostDrops = { community: top[0], count: top[1] };
-    }
-
     const result = {
+      total_listings: totalResult.count || 0,
       highest_dip_pct: highestPct,
-      highest_dip_aed: highestAed,
-      most_drops_community: mostDrops,
-      dips_today: dipsResult.count || 0,
+      sales_drops: salesDropsResult.count || 0,
+      rental_drops: rentalDropsResult.count || 0,
     };
 
     // Cache result
