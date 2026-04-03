@@ -169,27 +169,7 @@ export default function ListingDetail() {
           </>
         )}
 
-        {/* Same-listing price change */}
-        {hasSameListingChange && (
-          <>
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted mb-3">Same listing change</div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">Previous price</div>
-                  <div className="text-sm font-bold mt-0.5">{formatPrice(l.listing_change_prev_price)}</div>
-                </div>
-                <div className="bg-card rounded-xl p-3">
-                  <div className="text-[10px] text-muted">{sameDecrease ? 'Decreased by' : 'Increased by'}</div>
-                  <div className={`text-sm font-bold mt-0.5 ${sameDecrease ? 'text-dip-red' : 'text-accent'}`}>
-                    {sameDecrease ? '−' : '+'}{formatPrice(Math.abs(l.listing_change))}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="border-t border-border" />
-          </>
-        )}
+        {/* Same-listing price change — removed: already visible in price history chain above */}
 
         {/* Cross-listing price change panel */}
         {hasChange && (
