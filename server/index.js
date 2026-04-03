@@ -16,7 +16,9 @@ const PORT = process.env.PORT || 3001;
 
 const TABLE = 'ddf_listings';
 
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(cors({ origin: ['https://dxbdipfinder.com', 'https://www.dxbdipfinder.com', 'https://admin.dxbdipfinder.com'] }));
 app.use(compression());
 app.use(express.json());
