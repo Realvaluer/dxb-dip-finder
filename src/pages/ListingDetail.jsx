@@ -47,11 +47,13 @@ export default function ListingDetail() {
   }
 
   const l = listing;
-  const isDecrease = l.change_pct != null && l.change_pct < 0;
-  const isIncrease = l.change_pct != null && l.change_pct > 0;
+  // Pill: always show transaction comparison (vs last DLD sale/rent) — consistent with card
+  const displayPct = l.last_sale_change_pct;
+  const isDecrease = displayPct != null && displayPct < 0;
+  const isIncrease = displayPct != null && displayPct > 0;
   // PRD: previous_price != null && change_aed != null
   const hasChange = l.previous_price != null && l.change_aed != null;
-  const absChangePct = l.change_pct != null ? Math.abs(l.change_pct).toFixed(1) : null;
+  const absChangePct = displayPct != null ? Math.abs(displayPct).toFixed(1) : null;
   const absChangeAed = l.change_aed != null ? Math.abs(l.change_aed) : null;
   const aedPerSqft = l.size_sqft ? Math.round(l.price_aed / l.size_sqft) : null;
 
