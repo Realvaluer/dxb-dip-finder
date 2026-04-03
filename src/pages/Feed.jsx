@@ -117,7 +117,35 @@ export default function Feed() {
   const { data: kpiData, loading: kpiLoading } = useDebouncedFetch(kpiUrl, [queryString]);
   const { data: filterOptions } = useFetch('/api/filter-options', []);
 
-  // Sale data is now included inline in /api/listings response — no separate fetch needed
+  // Enrich listings missing last_sale data via POST /api/listings/sales
+  const [saleData, setSaleData] = useState({});
+  const enrichSales = useCallback((listings) => {
+    const missing = listings.filter(l => l.last_sale_price == null).map(l => l.id);
+    if (missing.length === 0) return;
+    fetch('/api/listings/sales', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: missing }),
+    })
+      .then(r => r.ok ? r.json() : {})
+      .then(data => {
+        if (Object.keys(data).length > 0) {
+          setSaleData(prev => ({ ...prev, ...data }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (listingsData?.listings?.length) enrichSales(listingsData.listings);
+  }, [listingsData]);
+
+  // Merge sale data into a listing
+  const withSaleData = useCallback((listing) => {
+    const sale = saleData[listing.id];
+    if (!sale || listing.last_sale_price != null) return listing;
+    return { ...listing, ...sale };
+  }, [saleData]);
 
   // Mobile: infinite scroll state
   const [allListings, setAllListings] = useState([]);
@@ -140,6 +168,7 @@ export default function Feed() {
       .then(d => {
         const newItems = d.listings || [];
         setAllListings(prev => [...prev, ...newItems]);
+        enrichSales(newItems);
         // If fewer than 30 returned, no more to load. Otherwise use total from initial load.
         setHasMore(newItems.length >= 30);
         setLoadingMore(false);
@@ -172,8 +201,8 @@ export default function Feed() {
     return () => evtSource?.close();
   }, []);
 
-  // Desktop computed values
-  const desktopListings = isDesktop ? (listingsData?.listings || []) : [];
+  // Desktop computed values — enrich with sale data
+  const desktopListings = isDesktop ? (listingsData?.listings || []).map(withSaleData) : [];
   const total = listingsData?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / DESKTOP_PAGE_SIZE));
 
@@ -420,9 +449,10 @@ export default function Feed() {
             </div>
           ) : (
             <div className="px-4 flex flex-col gap-3">
-              {allListings.map(l => (
-                <ListingCard key={l.id} listing={l} bookmarked={isBookmarked(l.id)} onToggleBookmark={toggle} />
-              ))}
+              {allListings.map(l => {
+                const enriched = withSaleData(l);
+                return <ListingCard key={l.id} listing={enriched} bookmarked={isBookmarked(l.id)} onToggleBookmark={toggle} />;
+              })}
               {loadingMore && <SkeletonCards count={2} />}
               {!hasMore && allListings.length > 0 && (
                 <div className="text-center text-xs text-muted py-4">End of results</div>
