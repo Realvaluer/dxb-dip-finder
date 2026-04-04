@@ -39,7 +39,7 @@ const websiteSchema = {
   '@type': 'WebSite',
   name: 'DXB Dip Finder',
   url: 'https://www.dxbdipfinder.com',
-  description: 'Track property price drops across 20 Dubai communities daily. Find below-market-value deals updated from PropertyFinder and Bayut.',
+  description: 'Track property price drops across 200k+ listings in Dubai. Find below-market-value deals updated from PropertyFinder and Bayut.',
   potentialAction: {
     '@type': 'SearchAction',
     target: {
@@ -213,7 +213,7 @@ export default function Feed() {
     <div className={`min-h-screen bg-bg ${isDesktop ? 'pb-4' : 'pb-20'}`}>
       <SEO
         title="Find Dubai Property Price Drops — Live Deal Tracker"
-        description="DXB Dip Finder tracks property price reductions across 20 Dubai communities daily. Find below-market deals in JVC, Business Bay, Dubai Marina, Downtown and more."
+        description="DXB Dip Finder tracks property price reductions across 200k+ listings in Dubai. Find below-market deals in JVC, Business Bay, Dubai Marina, Downtown and more."
         canonical="/"
         keywords={[
           'Dubai property price drop',
