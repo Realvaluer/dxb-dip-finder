@@ -118,8 +118,9 @@ export default function ListingDetail() {
         {/* Property detail tags */}
         <div className="flex flex-wrap gap-2">
           {(() => {
-            const readyLabel = l.ready_off_plan === 'ready' || l.ready_off_plan === 'Ready' ? 'Ready'
-              : (l.ready_off_plan === 'off_plan' || l.ready_off_plan === 'Off Plan') ? 'Off Plan'
+            const rop = (l.ready_off_plan || '').toLowerCase();
+            const readyLabel = rop === 'ready' ? 'Ready'
+              : (rop === 'off_plan' || rop === 'off plan' || rop === 'off-plan') ? 'Off Plan'
               : l.ready_off_plan || null;
             const isReady = readyLabel === 'Ready';
             const chips = [

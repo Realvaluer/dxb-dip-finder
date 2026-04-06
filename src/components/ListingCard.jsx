@@ -109,7 +109,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
         {(() => {
           const rop = l.ready_off_plan?.toLowerCase();
           if (rop === 'ready') return <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-purple-900/25 text-purple-300">Ready</span>;
-          if (rop === 'off_plan' || rop === 'off plan') return <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-orange-900/25 text-orange-300">Off Plan</span>;
+          if (rop === 'off_plan' || rop === 'off plan' || rop === 'off-plan') return <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-orange-900/25 text-orange-300">Off Plan</span>;
           return null;
         })()}
         <span className="ml-auto text-[10px] font-mono text-muted">{sourceTag(l.source)}</span>
