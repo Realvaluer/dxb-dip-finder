@@ -729,12 +729,30 @@ app.get('/api/kpis', async (req, res) => {
       })(),
     ]);
 
-    const highestPct = pctResult.data?.[0] ? {
+    let highestPct = pctResult.data?.[0] ? {
       listing_id: pctResult.data[0].id,
       change_pct: Math.round(pctResult.data[0].last_txn_change_pct * 10) / 10,
       property_name: pctResult.data[0].property_name,
       community: pctResult.data[0].community,
     } : null;
+
+    // Fallback: if no drops in last 24h, find the most recent drop overall
+    if (!highestPct) {
+      let fallbackQ = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
+        .eq('is_valid', true)
+        .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
+        .order('last_txn_change_pct', { ascending: true }).limit(1);
+      fallbackQ = applyFilters(fallbackQ, req.query);
+      const { data: fallbackData } = await fallbackQ;
+      if (fallbackData?.[0]) {
+        highestPct = {
+          listing_id: fallbackData[0].id,
+          change_pct: Math.round(fallbackData[0].last_txn_change_pct * 10) / 10,
+          property_name: fallbackData[0].property_name,
+          community: fallbackData[0].community,
+        };
+      }
+    }
 
     const result = {
       total_listings: totalResult.count || 0,
