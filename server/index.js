@@ -688,22 +688,15 @@ app.get('/api/kpis', async (req, res) => {
       return res.json(cached.data);
     }
 
-    // Get latest date in DB as "today"
-    const { data: latestRow } = await supabase
-      .from(TABLE)
-      .select('listed_date')
-      .eq('is_valid', true)
-      .order('listed_date', { ascending: false })
-      .limit(1)
-      .single();
-    const latestDate = latestRow?.listed_date;
+    // Get today's date (UTC) for "in last 24h" filter
+    const todayStr = new Date().toISOString().slice(0, 10);
 
     // Run all 4 KPI queries in parallel — use pre-computed last_txn_* columns
     const [pctResult, totalResult, salesDropsResult, rentalDropsResult] = await Promise.all([
       // Highest % drop TODAY (by transaction %) — respects filters
       (() => {
         let q = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
-          .eq('is_valid', true).eq('listed_date', latestDate || '')
+          .eq('is_valid', true).gte('listed_date', todayStr)
           .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
           .order('last_txn_change_pct', { ascending: true }).limit(1);
         q = applyFilters(q, req.query);
