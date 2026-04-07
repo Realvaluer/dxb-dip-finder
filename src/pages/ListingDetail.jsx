@@ -97,7 +97,7 @@ export default function ListingDetail() {
           <div className="text-sm text-muted mt-0.5">
             {[l.community, l.type, l.purpose?.toLowerCase() === 'sale' ? 'Sale' : 'Rent'].filter(Boolean).join(' · ')}
           </div>
-          <div className="text-xs text-muted mt-1">Listed {formatDate(l.date_listed)}</div>
+          <div className="text-xs text-muted mt-1">Listed {formatDate(l.listing_date)}</div>
         </div>
 
         {/* Price + change badge */}

@@ -52,7 +52,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
     >
       {/* Row 1: date + bookmark + change pill */}
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-mono text-muted">{formatDate(l.date_listed)}</span>
+        <span className="text-[11px] font-mono text-muted">{formatDate(l.listing_date)}</span>
         <div className="flex items-center gap-2">
           {isDecrease && (
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[rgba(226,75,74,0.15)] border border-[rgba(226,75,74,0.4)] text-dip-red">
