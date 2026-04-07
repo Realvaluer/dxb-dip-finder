@@ -58,7 +58,7 @@ setInterval(() => {
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // FIX 2: Select only fields the frontend needs (was SELECT * → 113KB, now ~40KB)
-const LISTING_SELECT = 'id, reference_no, source, scraped_at, listing_date, purpose, title, distress, ready_off_plan, city, community, property_name, type, bedrooms, bathrooms, size_sqft, furnished, price_aed, price_sqft, listing_change, broker_agency, url, dip_pct, dip_price, dip_ref_id, dip_prev_price, dip_prev_url, dip_prev_source, dip_prev_date, dip_prev_size, dip_prev_furnished, last_txn_price, last_txn_date, last_txn_change, last_txn_change_pct, last_txn_size, last_txn_type';
+const LISTING_SELECT = 'id, reference_no, source, scraped_at, listed_date, purpose, title, distress, ready_off_plan, city, community, property_name, type, bedrooms, bathrooms, size_sqft, furnished, price_aed, price_sqft, listing_change, broker_agency, url, dip_pct, dip_price, dip_ref_id, dip_prev_price, dip_prev_url, dip_prev_source, dip_prev_date, dip_prev_size, dip_prev_furnished, last_txn_price, last_txn_date, last_txn_change, last_txn_change_pct, last_txn_size, last_txn_type';
 // TODO: Add listing_change_method to LISTING_SELECT once column is added via Supabase dashboard
 
 function mapRow(row, refData, saleData) {
@@ -74,7 +74,7 @@ function mapRow(row, refData, saleData) {
     reference_no: row.reference_no,
     source: row.source,
     scraped_at: row.scraped_at,
-    listing_date: row.listing_date,
+    listed_date: row.listed_date,
     purpose: row.purpose,
     title: row.title,
     distress: row.distress,
@@ -101,7 +101,7 @@ function mapRow(row, refData, saleData) {
     // Previous listing data — prefer dip_prev_* columns, fallback to ref lookup
     // Only include prev data if we have at least the price — never show partial context
     previous_price: row.dip_prev_price || (ref ? ref.price_aed : null) || null,
-    price_changed_at: (row.dip_prev_price || ref) ? (row.dip_prev_date || (ref ? ref.listing_date : null)) : null,
+    price_changed_at: (row.dip_prev_price || ref) ? (row.dip_prev_date || (ref ? ref.listed_date : null)) : null,
     previous_url: (row.dip_prev_price || ref) ? (row.dip_prev_url || (ref ? ref.url : null)) : null,
     dip_prev_source: (row.dip_prev_price || ref) ? (row.dip_prev_source || (ref ? ref.source : null)) : null,
     dip_prev_size: (row.dip_prev_price || ref) ? (row.dip_prev_size || (ref ? ref.size_sqft : null)) : null,
@@ -127,7 +127,7 @@ async function fetchRefData(rows) {
     const batch = refIds.slice(i, i + 200);
     const { data } = await supabase
       .from(TABLE)
-      .select('id, price_aed, url, source, listing_date, size_sqft, furnished, property_name, community')
+      .select('id, price_aed, url, source, listed_date, size_sqft, furnished, property_name, community')
       .in('id', batch);
     (data || []).forEach(r => { refMap[r.id] = r; });
   }
@@ -388,10 +388,10 @@ function applyFilters(query, params) {
   }
 
   if (params.date_from) {
-    query = query.gte('listing_date', params.date_from);
+    query = query.gte('listed_date', params.date_from);
   }
   if (params.date_to) {
-    query = query.lte('listing_date', params.date_to);
+    query = query.lte('listed_date', params.date_to);
   }
 
   if (params.min_dip && parseFloat(params.min_dip) > 0) {
@@ -423,7 +423,7 @@ function applySort(query, sort) {
       return query.order('price_aed', { ascending: false });
     case 'newest':
     default:
-      return query.order('listing_date', { ascending: false }).order('community', { ascending: true });
+      return query.order('listed_date', { ascending: false }).order('community', { ascending: true });
   }
 }
 
@@ -609,7 +609,7 @@ app.get('/api/listings/:id', async (req, res) => {
     if (row.reference_no) {
       const { data: refHistory } = await supabase
         .from(TABLE)
-        .select('id, price_aed, listing_date, listing_change, scraped_at')
+        .select('id, price_aed, listed_date, listing_change, scraped_at')
         .eq('reference_no', row.reference_no)
         .eq('source', row.source)
         .order('scraped_at', { ascending: true });
@@ -619,7 +619,7 @@ app.get('/api/listings/:id', async (req, res) => {
           priceChain.push({
             id: s.id,
             price: s.price_aed,
-            date: s.listing_date,
+            date: s.listed_date,
             change: s.listing_change,
           });
         }
@@ -641,7 +641,7 @@ app.get('/api/listings/:id', async (req, res) => {
     } else if (row.dip_ref_id) {
       const { data: ref } = await supabase
         .from(TABLE)
-        .select('id, url, source, price_aed, listing_date, size_sqft, furnished')
+        .select('id, url, source, price_aed, listed_date, size_sqft, furnished')
         .eq('id', row.dip_ref_id)
         .single();
 
@@ -651,7 +651,7 @@ app.get('/api/listings/:id', async (req, res) => {
           url: ref.url,
           source: ref.source,
           price: ref.price_aed,
-          date: ref.listing_date,
+          date: ref.listed_date,
           size: ref.size_sqft,
           furnished: ref.furnished,
         };
@@ -691,19 +691,19 @@ app.get('/api/kpis', async (req, res) => {
     // Get latest date in DB as "today"
     const { data: latestRow } = await supabase
       .from(TABLE)
-      .select('listing_date')
+      .select('listed_date')
       .eq('is_valid', true)
-      .order('listing_date', { ascending: false })
+      .order('listed_date', { ascending: false })
       .limit(1)
       .single();
-    const latestDate = latestRow?.listing_date;
+    const latestDate = latestRow?.listed_date;
 
     // Run all 4 KPI queries in parallel — use pre-computed last_txn_* columns
     const [pctResult, totalResult, salesDropsResult, rentalDropsResult] = await Promise.all([
       // Highest % drop TODAY (by transaction %) — respects filters
       (() => {
         let q = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
-          .eq('is_valid', true).eq('listing_date', latestDate || '')
+          .eq('is_valid', true).eq('listed_date', latestDate || '')
           .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
           .order('last_txn_change_pct', { ascending: true }).limit(1);
         q = applyFilters(q, req.query);
@@ -1099,7 +1099,7 @@ app.get('/api/matches/:savedListingId', requireAuth, async (req, res) => {
       .eq('community', ref.community)
       .eq('bedrooms', ref.bedrooms)
       .neq('id', savedRow.listing_id)
-      .order('listing_date', { ascending: false })
+      .order('listed_date', { ascending: false })
       .limit(50);
 
     const { data, count, error } = await query;

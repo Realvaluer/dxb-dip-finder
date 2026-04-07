@@ -11,7 +11,7 @@ const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
 const TABLE = 'ddf_listings';
 
 // Fields needed for rich email cards
-const RICH_SELECT = 'id, property_name, community, bedrooms, size_sqft, price_aed, price_sqft, purpose, type, ready_off_plan, listing_change, url, dip_pct, dip_price, dip_prev_price, dip_prev_date, dip_prev_size, last_txn_price, last_txn_date, last_txn_change, last_txn_change_pct, last_txn_size, last_txn_type, listing_date, source';
+const RICH_SELECT = 'id, property_name, community, bedrooms, size_sqft, price_aed, price_sqft, purpose, type, ready_off_plan, listing_change, url, dip_pct, dip_price, dip_prev_price, dip_prev_date, dip_prev_size, last_txn_price, last_txn_date, last_txn_change, last_txn_change_pct, last_txn_size, last_txn_type, listed_date, source';
 
 export function startCronJobs() {
   // 6AM UTC = 10AM UAE (GMT+4). UAE has no DST.
@@ -117,8 +117,8 @@ async function processUserAlerts(user) {
       .eq('community', listing.community)
       .eq('bedrooms', listing.bedrooms)
       .neq('id', listing.id)
-      .gte('listing_date', since.slice(0, 10))
-      .order('listing_date', { ascending: false })
+      .gte('listed_date', since.slice(0, 10))
+      .order('listed_date', { ascending: false })
       .limit(10);
 
     if (matches && matches.length > 0) {
@@ -204,7 +204,7 @@ async function runDipReport() {
     .from(TABLE)
     .select(RICH_SELECT)
     .eq('is_valid', true)
-    .gte('listing_date', weekAgo)
+    .gte('listed_date', weekAgo)
     .not('last_txn_change_pct', 'is', null)
     .lt('last_txn_change_pct', 0)
     .order('last_txn_change_pct', { ascending: true })
@@ -308,7 +308,7 @@ function buildRichCardHtml(l) {
   const pillText = txnPct != null ? `${txnIsNeg ? '\u2212' : '+'}${Math.abs(txnPct).toFixed(1)}%` : null;
 
   // Date
-  const dateStr = l.listing_date ? fmtDate(l.listing_date) : '';
+  const dateStr = l.listed_date ? fmtDate(l.listed_date) : '';
 
   let html = `<div style="background:#252540;border-radius:8px;padding:12px 16px;margin-bottom:10px;">`;
 

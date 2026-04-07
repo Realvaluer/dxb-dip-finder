@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { formatPrice, formatDate, sourceTag } from '../utils';
 
 const COLUMNS = [
-  { key: 'listing_date', label: 'Date', width: '100px', sort: 'newest' },
+  { key: 'listed_date', label: 'Date', width: '100px', sort: 'newest' },
   { key: 'source', label: 'Source', width: '80px' },
   { key: 'purpose', label: 'Purpose', width: '70px' },
   { key: 'community', label: 'Community', width: '160px' },
@@ -52,7 +52,7 @@ function nextSort(col, currentSort) {
 function formatCell(col, listing) {
   const val = listing[col.key];
   switch (col.key) {
-    case 'listing_date': return formatDate(val);
+    case 'listed_date': return formatDate(val);
     case 'source': return sourceTag(val);
     case 'purpose': return val ? val.charAt(0).toUpperCase() + val.slice(1).toLowerCase() : '';
     case 'bedrooms': return val == null || val === 0 ? 'Studio' : val;
