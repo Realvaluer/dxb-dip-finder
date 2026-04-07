@@ -688,8 +688,10 @@ app.get('/api/kpis', async (req, res) => {
       return res.json(cached.data);
     }
 
-    // Last 24 hours
-    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Last 24h — use start of today (UTC) to catch both old date-only and new timestamp rows
+    const now = new Date();
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    const last24h = todayStart;
 
     // Run all 4 KPI queries in parallel — use pre-computed last_txn_* columns
     const [pctResult, totalResult, salesDropsResult, rentalDropsResult] = await Promise.all([
