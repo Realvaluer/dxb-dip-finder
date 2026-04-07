@@ -693,12 +693,23 @@ app.get('/api/kpis', async (req, res) => {
     const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
     const last24h = todayStart;
 
+    // Top 20 communities for highest % drop KPI
+    const TOP_COMMUNITIES = [
+      'Jumeirah Village Circle', 'Business Bay', 'Dubai Marina', 'Downtown Dubai',
+      'Jumeirah Lake Towers', 'Palm Jumeirah', 'Dubai Hills Estate',
+      'Arabian Ranches', 'Dubai Sports City', 'Al Furjan',
+      'Jumeirah Village Triangle', 'Dubai South', 'DAMAC Hills',
+      'Town Square', 'Meydan', 'International City', 'Dubai Land',
+      'Al Barsha', 'Motor City', 'Production City',
+    ];
+
     // Run all 4 KPI queries in parallel — use pre-computed last_txn_* columns
     const [pctResult, totalResult, salesDropsResult, rentalDropsResult] = await Promise.all([
-      // Highest % drop TODAY (by transaction %) — respects filters
+      // Highest % drop TODAY (by transaction %) — top 20 communities, respects filters
       (() => {
         let q = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
           .eq('is_valid', true).gte('listed_date', last24h)
+          .in('community', TOP_COMMUNITIES)
           .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
           .order('last_txn_change_pct', { ascending: true }).limit(1);
         q = applyFilters(q, req.query);
@@ -736,10 +747,11 @@ app.get('/api/kpis', async (req, res) => {
       community: pctResult.data[0].community,
     } : null;
 
-    // Fallback: if no drops in last 24h, find the most recent drop overall
+    // Fallback: if no drops in last 24h, find the most recent drop from top 20 communities
     if (!highestPct) {
       let fallbackQ = supabase.from(TABLE).select('id, last_txn_change_pct, property_name, community')
         .eq('is_valid', true)
+        .in('community', TOP_COMMUNITIES)
         .not('last_txn_change_pct', 'is', null).lt('last_txn_change_pct', 0)
         .order('last_txn_change_pct', { ascending: true }).limit(1);
       fallbackQ = applyFilters(fallbackQ, req.query);
