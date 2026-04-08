@@ -348,6 +348,10 @@ function toArray(val) {
 
 // Apply filters to a Supabase query
 function applyFilters(query, params) {
+  // Global filters: Dubai only, Residential only
+  query = query.eq('city', 'Dubai');
+  query = query.eq('category', 'Residential');
+
   if (params.search) {
     query = query.or(`community.ilike.%${params.search}%,property_name.ilike.%${params.search}%`);
   }
@@ -794,10 +798,10 @@ app.get('/api/filter-options', async (req, res) => {
 
     // Supabase doesn't have DISTINCT — fetch unique values
     const [commRes, typeRes, sourceRes, purposeRes] = await Promise.all([
-      supabase.from(TABLE).select('community').eq('is_valid', true).not('community', 'is', null).limit(5000),
-      supabase.from(TABLE).select('type').eq('is_valid', true).not('type', 'is', null).limit(2000),
-      supabase.from(TABLE).select('source').eq('is_valid', true).limit(1000),
-      supabase.from(TABLE).select('purpose').eq('is_valid', true).not('purpose', 'is', null).limit(1000),
+      supabase.from(TABLE).select('community').eq('is_valid', true).eq('city', 'Dubai').eq('category', 'Residential').not('community', 'is', null).limit(5000),
+      supabase.from(TABLE).select('type').eq('is_valid', true).eq('city', 'Dubai').eq('category', 'Residential').not('type', 'is', null).limit(2000),
+      supabase.from(TABLE).select('source').eq('is_valid', true).eq('city', 'Dubai').eq('category', 'Residential').limit(1000),
+      supabase.from(TABLE).select('purpose').eq('is_valid', true).eq('city', 'Dubai').eq('category', 'Residential').not('purpose', 'is', null).limit(1000),
     ]);
 
     const unique = (arr, key) => [...new Set((arr || []).map(r => r[key]).filter(Boolean))].sort();
@@ -958,7 +962,7 @@ app.get('/api/property-list', async (req, res) => {
         for (let j = i; j < Math.min(i + CONCURRENCY, pages); j++) {
           batch.push(
             supabase.from(TABLE).select('property_name, community')
-              .eq('is_valid', true).not('property_name', 'is', null)
+              .eq('is_valid', true).eq('city', 'Dubai').eq('category', 'Residential').not('property_name', 'is', null)
               .range(j * pageSize, j * pageSize + pageSize - 1)
           );
         }
