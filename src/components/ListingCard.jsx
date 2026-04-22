@@ -94,7 +94,7 @@ export default function ListingCard({ listing, bookmarked, onToggleBookmark }) {
       {/* Row 4: beds · sqft · purpose · source */}
       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
         <span className="text-xs text-muted">
-          {(l.bedrooms === 0 || l.bedrooms === null) ? 'Studio' : `${l.bedrooms}BR`} · {l.size_sqft?.toLocaleString()} sqft
+          {(l.bedrooms === 0 || l.bedrooms === null || l.bedrooms === 'Studio' || l.bedrooms === 'studio') ? 'Studio' : `${l.bedrooms}BR`} · {l.size_sqft?.toLocaleString()} sqft
         </span>
         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
           l.purpose?.toLowerCase() === 'sale' ? 'bg-teal-900/50 text-teal-300' : 'bg-amber-900/50 text-amber-300'

@@ -124,7 +124,7 @@ export default function ListingDetail() {
               : l.ready_off_plan || null;
             const isReady = readyLabel === 'Ready';
             const chips = [
-              (l.bedrooms === 0 || l.bedrooms === null) ? 'Studio' : `${l.bedrooms} Beds`,
+              (l.bedrooms === 0 || l.bedrooms === null || l.bedrooms === 'Studio' || l.bedrooms === 'studio') ? 'Studio' : `${l.bedrooms} Beds`,
               l.size_sqft ? `${l.size_sqft.toLocaleString()} sqft` : null,
               l.furnished,
               aedPerSqft ? `AED ${aedPerSqft.toLocaleString()}/sqft` : null,

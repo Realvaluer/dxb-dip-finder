@@ -369,7 +369,7 @@ function applyFilters(query, params) {
     if (bed === 4) {
       query = query.gte('bedrooms', '4');
     } else if (bed === 0) {
-      query = query.or('bedrooms.is.null,bedrooms.eq.0');
+      query = query.or('bedrooms.is.null,bedrooms.eq.0,bedrooms.eq.Studio');
     } else {
       query = query.eq('bedrooms', String(bed));
     }

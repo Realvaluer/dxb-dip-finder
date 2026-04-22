@@ -55,7 +55,7 @@ function formatCell(col, listing) {
     case 'listed_date': return formatDate(val);
     case 'source': return sourceTag(val);
     case 'purpose': return val ? val.charAt(0).toUpperCase() + val.slice(1).toLowerCase() : '';
-    case 'bedrooms': return val == null || val === 0 ? 'Studio' : val;
+    case 'bedrooms': return val == null || val === 0 || val === 'Studio' || val === 'studio' ? 'Studio' : val;
     case 'size_sqft': return val ? Number(val).toLocaleString() : '—';
     case 'price_aed': return val ? `AED ${Number(val).toLocaleString()}` : '—';
     case 'change_pct': {
