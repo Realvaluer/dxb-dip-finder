@@ -112,6 +112,9 @@ if (!Database) {
   // Add columns to saved_listings for alert tracking (safe if already exist)
   try { usersDb.exec('ALTER TABLE saved_listings ADD COLUMN last_price_alerted REAL'); } catch {}
   try { usersDb.exec('ALTER TABLE saved_listings ADD COLUMN last_match_alerted_at DATETIME'); } catch {}
+  // Track when we last sent the dip report to avoid repeating listings
+  try { usersDb.exec('ALTER TABLE dip_report_subscribers ADD COLUMN last_report_sent_at DATETIME'); } catch {}
+  try { usersDb.exec('ALTER TABLE dip_report_subscribers ADD COLUMN last_sent_ids TEXT'); } catch {}
 
   console.log('Users DB initialized at:', usersDbPath);
 } catch (err) {

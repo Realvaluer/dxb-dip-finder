@@ -194,14 +194,22 @@ async function runDipReport() {
   if (!usersDb) { console.log('[CRON] usersDb not available, skipping dip report'); return; }
 
   const subscribers = usersDb.prepare(
-    'SELECT email, user_id FROM dip_report_subscribers WHERE active = 1'
+    'SELECT id, email, user_id, last_sent_ids FROM dip_report_subscribers WHERE active = 1'
   ).all();
 
   if (subscribers.length === 0) { console.log('[CRON] No dip report subscribers'); return; }
 
-  // Get top 10 dips from last 7 days
+  // Collect all previously sent listing IDs across all subscribers to exclude
+  const allPrevSentIds = new Set();
+  for (const sub of subscribers) {
+    if (sub.last_sent_ids) {
+      try { JSON.parse(sub.last_sent_ids).forEach(id => allPrevSentIds.add(id)); } catch {}
+    }
+  }
+
+  // Get top 20 dips from last 7 days (fetch extra to allow filtering out already-sent)
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const { data: topDips } = await supabase
+  const { data: rawDips } = await supabase
     .from(TABLE)
     .select(RICH_SELECT)
     .eq('is_valid', true)
@@ -210,14 +218,18 @@ async function runDipReport() {
     .not('last_txn_change_pct', 'is', null)
     .lt('last_txn_change_pct', 0)
     .order('last_txn_change_pct', { ascending: true })
-    .limit(10);
+    .limit(20);
 
-  if (!topDips || topDips.length === 0) {
-    console.log('[CRON] No dips to report this week');
+  // Filter out listings that were already sent in previous reports
+  const topDips = (rawDips || []).filter(d => !allPrevSentIds.has(d.id)).slice(0, 10);
+
+  if (topDips.length === 0) {
+    console.log('[CRON] No new dips to report (all already sent)');
     return;
   }
 
-  console.log(`[CRON] Sending dip report to ${subscribers.length} subscribers (${topDips.length} dips)`);
+  const newSentIds = topDips.map(d => d.id);
+  console.log(`[CRON] Sending dip report to ${subscribers.length} subscribers (${topDips.length} new dips)`);
 
   let sent = 0;
   const subject = buildWeeklySubject();
@@ -246,6 +258,17 @@ async function runDipReport() {
           html,
         });
         sent++;
+
+        // Update subscriber's tracking: merge new IDs with previous, keep last 50
+        let prevIds = [];
+        if (sub.last_sent_ids) {
+          try { prevIds = JSON.parse(sub.last_sent_ids); } catch {}
+        }
+        const mergedIds = [...new Set([...prevIds, ...newSentIds])].slice(-50);
+        usersDb.prepare(
+          "UPDATE dip_report_subscribers SET last_report_sent_at = datetime('now'), last_sent_ids = ? WHERE id = ?"
+        ).run(JSON.stringify(mergedIds), sub.id);
+
         // Small delay to respect rate limits
         await new Promise(r => setTimeout(r, 100));
       }
